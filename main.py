@@ -286,6 +286,22 @@ def start_telegram_bot():
 def main():
     log_info("Запуск приложения OrionEventsToTelegram...")
     
+    # Создаем папку db если её нет
+    if not os.path.exists('db'):
+        os.makedirs('db')
+        log_success("Папка db создана")
+    
+    # Создаем файлы данных если их нет
+    if not os.path.exists(AUTHORIZED_USERS_FILE):
+        with open(AUTHORIZED_USERS_FILE, 'w', encoding='utf-8') as f:
+            pass  # Создаем пустой файл
+        log_success(f"Файл {AUTHORIZED_USERS_FILE} создан")
+    
+    if not os.path.exists(USER_FILTERS_FILE):
+        with open(USER_FILTERS_FILE, 'w', encoding='utf-8') as f:
+            pass  # Создаем пустой файл
+        log_success(f"Файл {USER_FILTERS_FILE} создан")
+    
     smtp_thread = threading.Thread(target=start_smtp_server)
     smtp_thread.daemon = True  # Поток завершится при закрытии основного потока
     smtp_thread.start()
