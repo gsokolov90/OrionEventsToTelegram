@@ -10,6 +10,8 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 from config import get_telegram_token, get_authorized_users_file, get_user_filters_file
+import time
+import requests
 
 # Настройка кодировки для Windows
 if os.name == 'nt':  # Windows
@@ -275,13 +277,22 @@ def start_telegram_bot():
         log_telegram(f"Получено сообщение от пользователя {message.from_user.id}: {message.text}")
 
     log_success("Telegram бот запущен")
-    try:
-        bot.infinity_polling(timeout=60, long_polling_timeout=60)
-    except Exception as e:
-        log_error(f"Ошибка в Telegram боте: {e}")
-        # Перезапуск бота при ошибке
-        log_info("Перезапуск Telegram бота...")
-        start_telegram_bot()
+    delay = 5  # стартовая задержка между попытками (сек)
+    while True:
+        try:
+            bot.infinity_polling(timeout=60, long_polling_timeout=60)
+        except requests.exceptions.ReadTimeout as e:
+            log_warning(f"ReadTimeout: {e}. Повтор через {delay} сек.")
+            time.sleep(delay)
+            delay = min(delay * 2, 300)  # увеличиваем задержку до 5 минут максимум
+        except Exception as e:
+            import traceback
+            log_error(f"Ошибка в Telegram боте: {e}")
+            traceback.print_exc()
+            time.sleep(delay)
+            delay = min(delay * 2, 300)
+        else:
+            delay = 5  # если всё прошло хорошо, сбрасываем задержку
 
 def main():
     log_info("Запуск приложения OrionEventsToTelegram...")
