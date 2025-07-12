@@ -8,24 +8,104 @@ echo   OrionEventsToTelegram - Run
 echo ========================================
 echo.
 
-REM Check if virtual environment exists
-if not exist .venv (
-    echo [ERROR] Virtual environment not found!
-    echo [INFO] Run setup.bat for installation
+REM Check if Python is installed
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Python not found!
+    echo [INFO] Please install Python 3.8+ from https://python.org
     pause
     exit /b 1
 )
 
-REM Check if .env file exists
-if not exist .env (
-    echo [ERROR] .env file not found!
-    echo [INFO] Run setup.bat for configuration
+echo [INFO] Python found: 
+python --version
+
+REM Create app directory if it doesn't exist
+if not exist app (
+    mkdir app
+    echo [INFO] Created app directory
+)
+
+REM Create virtual environment if it doesn't exist
+if not exist app\.venv (
+    echo [INFO] Creating virtual environment...
+    cd app
+    python -m venv .venv
+    cd ..
+    echo [SUCCESS] Virtual environment created
+) else (
+    echo [INFO] Virtual environment found
+)
+
+REM Create db directory if it doesn't exist
+if not exist db (
+    mkdir db
+    echo [INFO] Created db directory
+)
+
+REM Create config.ini if it doesn't exist
+if not exist config.ini (
+    echo [INFO] Creating config.ini...
+    echo [Telegram] > config.ini
+    echo bot_token = your_telegram_bot_token_here >> config.ini
+    echo. >> config.ini
+    echo [Paths] >> config.ini
+    echo authorized_users_file = db/authorized_users.txt >> config.ini
+    echo user_filters_file = db/user_filters.txt >> config.ini
+    echo [SUCCESS] config.ini created
+    echo [INFO] Please edit config.ini and set your Telegram bot token
+    echo [INFO] Then run this script again
     pause
     exit /b 1
 )
 
+REM Check if config.ini has default token
+findstr /C:"your_telegram_bot_token_here" config.ini >nul
+if not errorlevel 1 (
+    echo [ERROR] Please configure your Telegram bot token in config.ini
+    echo [INFO] Replace "your_telegram_bot_token_here" with your actual token
+    pause
+    exit /b 1
+)
+
+REM Activate virtual environment
 echo [INFO] Activating virtual environment...
-call .venv\Scripts\activate.bat
+call app\.venv\Scripts\activate.bat
+
+REM Check if requirements.txt exists
+if not exist app\requirements.txt (
+    echo [ERROR] requirements.txt not found in app directory!
+    pause
+    exit /b 1
+)
+
+REM Check if packages are installed and up to date
+echo [INFO] Checking dependencies...
+cd app
+
+REM Get current requirements hash
+for /f "delims=" %%i in ('certutil -hashfile requirements.txt MD5 2^>nul') do set "REQ_HASH=%%i"
+set "REQ_HASH=%REQ_HASH:~0,32%"
+
+REM Check if .venv/requirements_hash.txt exists and matches
+if exist .venv\requirements_hash.txt (
+    set /p "CACHED_HASH=" < .venv\requirements_hash.txt
+    if "%CACHED_HASH%"=="%REQ_HASH%" (
+        echo [INFO] Dependencies are up to date
+    ) else (
+        echo [INFO] Requirements changed, updating dependencies...
+        pip install -r requirements.txt --upgrade
+        echo %REQ_HASH% > .venv\requirements_hash.txt
+        echo [SUCCESS] Dependencies updated
+    )
+) else (
+    echo [INFO] Installing dependencies...
+    pip install -r requirements.txt
+    echo %REQ_HASH% > .venv\requirements_hash.txt
+    echo [SUCCESS] Dependencies installed
+)
+
+cd ..
 
 echo.
 echo [INFO] Starting application...
@@ -33,6 +113,7 @@ echo [INFO] Press Ctrl+C to stop
 echo.
 
 REM Run the application
+cd app
 python main.py
 
 echo.
