@@ -19,6 +19,8 @@ try:
         logger.error(message)
     def log_debug(message, module='EventsDatabase'):
         logger.debug(message)
+    def log_warning(message, module='EventsDatabase'):
+        logger.warning(message)
 except ImportError:
     # Fallback для прямого запуска файла
     from .logger import get_logger
@@ -29,6 +31,8 @@ except ImportError:
         logger.error(message)
     def log_debug(message, module='EventsDatabase'):
         logger.debug(message)
+    def log_warning(message, module='EventsDatabase'):
+        logger.warning(message)
 
 
 class EventsDatabaseManager:
@@ -329,9 +333,21 @@ class EventsCleanupScheduler:
     
     def stop(self):
         """Остановка планировщика очистки"""
+        if not self.running:
+            return
+            
+        log_info("🛑 Остановка планировщика очистки событий...", module='EventsDatabase')
         self.running = False
-        if self.cleanup_thread:
-            self.cleanup_thread.join(timeout=5)
+        
+        if self.cleanup_thread and self.cleanup_thread.is_alive():
+            # Ждем завершения потока с таймаутом
+            self.cleanup_thread.join(timeout=3)
+            
+            if self.cleanup_thread.is_alive():
+                log_warning("⚠️  Поток планировщика не завершился в течение 3 секунд", module='EventsDatabase')
+            else:
+                log_info("✅ Поток планировщика успешно завершен", module='EventsDatabase')
+        
         log_info("🛑 Планировщик очистки событий остановлен", module='EventsDatabase')
     
     def _cleanup_loop(self):
@@ -353,14 +369,25 @@ class EventsCleanupScheduler:
                         log_info("✅ Очистка завершена: записи для удаления не найдены", module='EventsDatabase')
                     
                     # Ждем минуту, чтобы не запустить очистку повторно
-                    time.sleep(60)
+                    # Используем более короткие интервалы для быстрого реагирования на остановку
+                    for _ in range(60):
+                        if not self.running:
+                            break
+                        time.sleep(1)
                 else:
-                    # Проверяем каждую минуту
-                    time.sleep(60)
+                    # Проверяем каждую минуту, но с более короткими интервалами
+                    for _ in range(60):
+                        if not self.running:
+                            break
+                        time.sleep(1)
                     
             except Exception as e:
                 log_error(f"Ошибка в планировщике очистки: {e}", module='EventsDatabase')
-                time.sleep(300)  # Ждем 5 минут при ошибке
+                # При ошибке ждем 5 минут, но с проверкой остановки
+                for _ in range(300):
+                    if not self.running:
+                        break
+                    time.sleep(1)
 
 
 def init_events_database(db_path: str) -> EventsDatabaseManager:
