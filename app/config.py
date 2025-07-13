@@ -18,7 +18,13 @@ def get_config():
             'admin_ids = 123456789,987654321\n'
             '\n'
             '[Database]\n'
-            'db_path = db/users.db\n'
+            'users_db_path = db/users.db\n'
+            'events_db_path = db/events.db\n'
+            'events_retention_days = 180\n'
+            '\n'
+            '[Cleanup]\n'
+            'cleanup_enabled = true\n'
+            'cleanup_time = 02:00\n'
             '\n'
             '[Paths]\n'
             'authorized_users_file = db/authorized_users.txt\n'
@@ -74,21 +80,92 @@ def get_admin_ids():
         print(f"⚠️  Ошибка парсинга ID администраторов: {e}")
         return []
 
-def get_database_path():
-    """Получение пути к базе данных"""
+def get_users_database_path():
+    """Получение пути к базе данных пользователей"""
     config = get_config()
     
     if 'Database' not in config:
         # Возвращаем путь по умолчанию относительно корня проекта
         return str(Path(__file__).parent.parent / 'db' / 'users.db')
     
-    db_path = config.get('Database', 'db_path', fallback='db/users.db')
+    db_path = config.get('Database', 'users_db_path', fallback='db/users.db')
     
     # Если путь относительный, делаем его абсолютным относительно корня проекта
     if not os.path.isabs(db_path):
         return str(Path(__file__).parent.parent / db_path)
     
     return db_path
+
+def get_events_database_path():
+    """Получение пути к базе данных событий"""
+    config = get_config()
+    
+    if 'Database' not in config:
+        # Возвращаем путь по умолчанию относительно корня проекта
+        return str(Path(__file__).parent.parent / 'db' / 'events.db')
+    
+    db_path = config.get('Database', 'events_db_path', fallback='db/events.db')
+    
+    # Если путь относительный, делаем его абсолютным относительно корня проекта
+    if not os.path.isabs(db_path):
+        return str(Path(__file__).parent.parent / db_path)
+    
+    return db_path
+
+def get_events_retention_days():
+    """Получение количества дней для хранения событий"""
+    config = get_config()
+    
+    if 'Database' not in config:
+        # По умолчанию 180 дней
+        return 180
+    
+    try:
+        retention_days = config.getint('Database', 'events_retention_days', fallback=180)
+        if retention_days < 1:
+            print(f"⚠️  Неверное количество дней '{retention_days}'. Используется 180.")
+            return 180
+        return retention_days
+    except ValueError:
+        print(f"⚠️  Неверный формат количества дней. Используется 180.")
+        return 180
+
+def get_cleanup_enabled():
+    """Получение настройки включения автоматической очистки"""
+    config = get_config()
+    
+    if 'Cleanup' not in config:
+        # По умолчанию включено
+        return True
+    
+    try:
+        return config.getboolean('Cleanup', 'cleanup_enabled', fallback=True)
+    except ValueError:
+        print(f"⚠️  Неверный формат настройки cleanup_enabled. Используется True.")
+        return True
+
+def get_cleanup_time():
+    """Получение времени запуска очистки"""
+    config = get_config()
+    
+    if 'Cleanup' not in config:
+        # По умолчанию 02:00
+        return "02:00"
+    
+    cleanup_time = config.get('Cleanup', 'cleanup_time', fallback='02:00')
+    
+    # Проверяем формат времени HH:MM
+    import re
+    if not re.match(r'^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$', cleanup_time):
+        print(f"⚠️  Неверный формат времени '{cleanup_time}'. Используется 02:00.")
+        return "02:00"
+    
+    return cleanup_time
+
+# Для обратной совместимости
+def get_database_path():
+    """Получение пути к базе данных пользователей (обратная совместимость)"""
+    return get_users_database_path()
 
 def get_authorized_users_file():
     config = get_config()
@@ -134,10 +211,6 @@ def get_logging_level():
         return 'WARNING'
     
     return level
-
-
-
-
 
 def get_logging_backup_logs_count():
     """Получение количества дней для хранения логов"""

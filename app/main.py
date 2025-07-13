@@ -20,7 +20,8 @@ import requests
 import urllib3
 from app.user_manager import UserManager
 from app.database import init_database
-from app.config import get_telegram_token, get_authorized_users_file, get_user_filters_file, get_logging_level, get_admin_ids, get_database_path, get_logging_backup_logs_count
+from app.events_database import init_events_database, EventsCleanupScheduler
+from app.config import get_telegram_token, get_authorized_users_file, get_user_filters_file, get_logging_level, get_admin_ids, get_users_database_path, get_events_database_path, get_events_retention_days, get_cleanup_enabled, get_cleanup_time, get_logging_backup_logs_count
 
 def get_version():
     """Читает версию из файла VERSION"""
@@ -59,7 +60,7 @@ init()
 # Получаем токен из переменных окружения
 TELEGRAM_BOT_TOKEN = get_telegram_token()
 ADMIN_IDS = get_admin_ids()
-DATABASE_PATH = get_database_path()
+DATABASE_PATH = get_users_database_path()
 
 # Для обратной совместимости (если нужны старые пути)
 try:
@@ -93,16 +94,28 @@ stop_bot = False
 # Глобальная переменная для менеджера пользователей
 user_manager = None
 
+# Глобальная переменная для планировщика очистки событий
+events_cleanup_scheduler = None
+
 # Удаляем функцию check_user_input, так как она создает конфликты
 
 def signal_handler(signum, frame):
     """Обработчик сигналов для корректного завершения"""
-    global stop_bot
+    global stop_bot, events_cleanup_scheduler
     
     # Проверяем, был ли уже запрос на выход
     if hasattr(signal_handler, 'exit_requested'):
         log_warning("Подтверждено завершение работы...", module='CORE')
         stop_bot = True
+        
+        # Останавливаем планировщик очистки событий
+        if events_cleanup_scheduler:
+            try:
+                events_cleanup_scheduler.stop()
+                log_info("Планировщик очистки событий остановлен", module='CORE')
+            except Exception as e:
+                log_error(f"Ошибка остановки планировщика очистки: {e}", module='CORE')
+        
         # Останавливаем бота
         try:
             # bot.stop_polling() # Удалено
@@ -222,10 +235,11 @@ def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
 class SMTPHandler(Message):
-    def __init__(self, bot=None, user_manager=None):
+    def __init__(self, bot=None, user_manager=None, events_db=None):
         super().__init__()
         self.bot = bot
         self.user_manager = user_manager
+        self.events_db = events_db
     
     def handle_message(self, message):
         log_smtp("📧 Получено новое email сообщение")
@@ -257,6 +271,39 @@ class SMTPHandler(Message):
         log_smtp(f"👤 Обработка события: {employee_name}")
         log_debug(f"📧 Полное содержимое email: {body}", module='SMTP')
         
+        # Сохраняем событие в базу данных
+        if self.events_db:
+            try:
+                # Парсим данные из сообщения
+                time_match = re.search(r'\b(\d{1,2}:\d{2}):\d{2}\b', body)
+                direction_match = re.search(r'режим:(\S+)', body)
+                
+                event_time = time_match.group(1) if time_match else ""
+                full_time = time_match.group(0) if time_match else ""
+                direction = direction_match.group(1) if direction_match else ""
+                
+                # Создаем обработанное сообщение для Telegram
+                processed_message = process_string(body)
+                
+                # Сохраняем в базу данных
+                if employee_name and direction and event_time:
+                    success = self.events_db.add_event(
+                        employee_name=employee_name,
+                        direction=direction,
+                        event_time=event_time,
+                        full_time=full_time,
+                        raw_message=body,
+                        processed_message=processed_message
+                    )
+                    if success:
+                        log_info(f"💾 Событие сохранено в базу данных: {employee_name} - {direction}", module='EventsDatabase')
+                    else:
+                        log_error(f"❌ Ошибка сохранения события в базу данных: {employee_name}", module='EventsDatabase')
+                else:
+                    log_warning(f"⚠️  Неполные данные для сохранения события: сотрудник='{employee_name}', направление='{direction}', время='{event_time}'", module='EventsDatabase')
+            except Exception as e:
+                log_error(f"❌ Ошибка обработки события для базы данных: {e}", module='EventsDatabase')
+        
         # Отправляем только тело сообщения в Telegram
         msg_text = body
         log_debug("DEBUG: Подготовка к отправке в Telegram", module='SMTP')
@@ -284,7 +331,7 @@ class SMTPHandler(Message):
             except Exception as e:
                 log_error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}", module='Telegram')
 
-def start_smtp_server(bot=None, user_manager=None):
+def start_smtp_server(bot=None, user_manager=None, events_db=None):
     log_info("🚀 Запуск SMTP сервера...", module='SMTP')
     log_debug("DEBUG: Инициализация SMTP сервера", module='SMTP')
     
@@ -298,7 +345,7 @@ def start_smtp_server(bot=None, user_manager=None):
     else:
         log_debug("DEBUG: aiosmtpd логи включены", module='SMTP')
     
-    handler = SMTPHandler(bot, user_manager)
+    handler = SMTPHandler(bot, user_manager, events_db)
     controller = Controller(handler, hostname='127.0.0.1', port=1025)
     
     try:
@@ -669,9 +716,34 @@ def main():
     global user_manager
     user_manager = UserManager(db)
     log_info("✅ Менеджер пользователей инициализирован", module='CORE')
+
+    # Инициализация базы данных событий
+    events_db_path = get_events_database_path()
+    events_retention_days = get_events_retention_days()
+    cleanup_enabled = get_cleanup_enabled()
+    cleanup_time = get_cleanup_time()
+
+    log_info(f"🗄️  Инициализация базы данных событий: {events_db_path}", module='CORE')
+    events_db = init_events_database(events_db_path)
+    log_info("✅ База данных событий инициализирована", module='CORE')
     
-    # Запускаем SMTP сервер с передачей бота и user_manager
-    smtp_thread = threading.Thread(target=start_smtp_server, args=(bot, user_manager))
+    # Получаем статистику событий
+    stats = events_db.get_statistics()
+    log_info(f"📊 Статистика событий: {stats['total_events']} записей, {stats['unique_employees']} сотрудников", module='CORE')
+
+    # Инициализация планировщика очистки событий
+    global events_cleanup_scheduler
+    if cleanup_enabled:
+        log_info(f"🧹 Запуск планировщика очистки событий (время: {cleanup_time})", module='CORE')
+        events_cleanup_scheduler = EventsCleanupScheduler(events_db, events_retention_days, cleanup_time, cleanup_enabled)
+        events_cleanup_scheduler.start()
+        log_info("✅ Планировщик очистки событий запущен", module='CORE')
+    else:
+        log_info("🧹 Планировщик очистки событий отключен в конфигурации.", module='CORE')
+        events_cleanup_scheduler = None
+    
+    # Запускаем SMTP сервер с передачей бота, user_manager и events_db
+    smtp_thread = threading.Thread(target=start_smtp_server, args=(bot, user_manager, events_db))
     smtp_thread.daemon = True  # Поток завершится при закрытии основного потока
     smtp_thread.start()
 
