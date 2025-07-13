@@ -119,7 +119,7 @@ OrionEventsToTelegram/
 # Уровень логирования: DEBUG, INFO, WARNING, ERROR
 level = INFO
 # Количество дней для хранения логов
-backup_count = 5
+backup_logs_count = 5
 ```
 
 Уровни логирования:

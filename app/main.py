@@ -9,7 +9,7 @@ import re
 from colorama import init, Fore, Back, Style
 from datetime import datetime
 import os
-from config import get_telegram_token, get_authorized_users_file, get_user_filters_file, get_logging_level, get_admin_ids, get_database_path
+from config import get_telegram_token, get_authorized_users_file, get_user_filters_file, get_logging_level, get_admin_ids, get_database_path, get_logging_backup_logs_count
 import time
 import requests
 from user_manager import UserManager
