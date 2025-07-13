@@ -7,14 +7,25 @@ from typing import Set, Dict, Optional, List, Tuple, Any
 from datetime import datetime
 
 # Импорты с обработкой ошибок
-from app.logger import get_logger
-logger = get_logger('UserManager')
-def log_info(message: str, module: str = 'UserManager') -> None:
-    logger.info(message)
-def log_warning(message: str, module: str = 'UserManager') -> None:
-    logger.warning(message)
-def log_error(message: str, module: str = 'UserManager') -> None:
-    logger.error(message)
+try:
+    from app.logger import get_logger
+    logger = get_logger('UserManager')
+    def log_info(message: str, module: str = 'UserManager') -> None:
+        logger.info(message)
+    def log_warning(message: str, module: str = 'UserManager') -> None:
+        logger.warning(message)
+    def log_error(message: str, module: str = 'UserManager') -> None:
+        logger.error(message)
+except ImportError:
+    # Fallback для прямого запуска файла
+    from .logger import get_logger
+    logger = get_logger('UserManager')
+    def log_info(message: str, module: str = 'UserManager') -> None:
+        logger.info(message)
+    def log_warning(message: str, module: str = 'UserManager') -> None:
+        logger.warning(message)
+    def log_error(message: str, module: str = 'UserManager') -> None:
+        logger.error(message)
 
 
 class UserManager:

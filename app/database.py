@@ -6,12 +6,21 @@ import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
-from app.logger import get_logger
-logger = get_logger('Database')
-def log_info(message, module='Database'):
-    logger.info(message)
-def log_error(message, module='Database'):
-    logger.error(message)
+try:
+    from app.logger import get_logger
+    logger = get_logger('Database')
+    def log_info(message, module='Database'):
+        logger.info(message)
+    def log_error(message, module='Database'):
+        logger.error(message)
+except ImportError:
+    # Fallback для прямого запуска файла
+    from .logger import get_logger
+    logger = get_logger('Database')
+    def log_info(message, module='Database'):
+        logger.info(message)
+    def log_error(message, module='Database'):
+        logger.error(message)
 
 
 class DatabaseManager:

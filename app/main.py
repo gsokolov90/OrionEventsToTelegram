@@ -1,3 +1,10 @@
+import sys
+import os
+
+# Добавляем родительскую директорию в sys.path для работы относительных импортов
+if __name__ == '__main__':
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import threading
 import logging
 import signal
@@ -8,13 +15,12 @@ import telebot
 import re
 from colorama import init, Fore, Back, Style
 from datetime import datetime
-import os
-from config import get_telegram_token, get_authorized_users_file, get_user_filters_file, get_logging_level, get_admin_ids, get_database_path, get_logging_backup_logs_count
 import time
 import requests
 import urllib3
-from user_manager import UserManager
-from database import init_database
+from app.user_manager import UserManager
+from app.database import init_database
+from app.config import get_telegram_token, get_authorized_users_file, get_user_filters_file, get_logging_level, get_admin_ids, get_database_path, get_logging_backup_logs_count
 
 def get_version():
     """Читает версию из файла VERSION"""
@@ -67,7 +73,7 @@ except RuntimeError:
 LOGGING_LEVEL = get_logging_level()
 
 # Инициализируем наш логгер
-from logger import setup_logger
+from app.logger import setup_logger
 logger_instance = setup_logger(LOGGING_LEVEL)
 
 # Настройка логгеров сторонних библиотек уже выполняется в logger.py
@@ -75,7 +81,7 @@ logger_instance = setup_logger(LOGGING_LEVEL)
 # Форматтеры и фильтры уже настроены в logger.py
 
 # Используем наш логгер
-from logger import get_logger
+from app.logger import get_logger
 logger = get_logger(__name__)
 
 # Удаляю глобальное создание bot
@@ -153,7 +159,7 @@ MODULE_COLORS = {
 }
 
 # Используем функции логирования из нашего модуля
-from logger import log_info, log_warning, log_error, log_debug, log_telegram, log_smtp
+from app.logger import log_info, log_warning, log_error, log_debug, log_telegram, log_smtp
 
 def log_message(level, message, module='CORE'):
     """Логирование сообщений с указанием уровня"""
