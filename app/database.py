@@ -6,20 +6,12 @@ import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
-try:
-    from .logger import get_logger
-    logger = get_logger('Database')
-    def log_info(message, module='Database'):
-        logger.info(f"[{module}] {message}")
-    def log_error(message, module='Database'):
-        logger.error(f"[{module}] {message}")
-except ImportError:
-    # Для работы как отдельный модуль
-    def log_info(message, module='Database'):
-        print(f"[INFO] {module}: {message}")
-    
-    def log_error(message, module='Database'):
-        print(f"[ERROR] {module}: {message}")
+from app.logger import get_logger
+logger = get_logger('Database')
+def log_info(message, module='Database'):
+    logger.info(message)
+def log_error(message, module='Database'):
+    logger.error(message)
 
 
 class DatabaseManager:
