@@ -96,16 +96,18 @@ class TechnicalLogFilter(logging.Filter):
     
     def filter(self, record: logging.LogRecord) -> bool:
         """Фильтрует технические сообщения"""
+        message = record.getMessage()
+        
         if self.debug_mode:
             # В DEBUG режиме пропускаем все сообщения с ключевыми словами DEBUG
-            message = record.getMessage()
             if any(keyword in message for keyword in self.DEBUG_KEYWORDS):
                 return True
             # Остальные технические сообщения фильтруем даже в DEBUG
             return not any(keyword in message for keyword in self.TECHNICAL_KEYWORDS)
         
-        message = record.getMessage()
-        return not any(keyword in message for keyword in self.TECHNICAL_KEYWORDS)
+        # В не-DEBUG режимах фильтруем все технические сообщения
+        # включая те, что содержат DEBUG_KEYWORDS
+        return not any(keyword in message for keyword in self.TECHNICAL_KEYWORDS + self.DEBUG_KEYWORDS)
 
 
 class Logger:

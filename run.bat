@@ -113,8 +113,7 @@ echo [INFO] Press Ctrl+C to stop
 echo.
 
 REM Run the application
-cd app
-python main.py
+app\.venv\Scripts\python.exe -m app.main
 
 echo.
 echo [INFO] Application stopped
