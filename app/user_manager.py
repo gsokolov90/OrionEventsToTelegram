@@ -8,7 +8,14 @@ from datetime import datetime
 
 # Импорты с обработкой ошибок
 try:
-    from .logger import log_info, log_warning, log_error
+    from .logger import get_logger
+    logger = get_logger('UserManager')
+    def log_info(message: str, module: str = 'UserManager') -> None:
+        logger.info(f"[{module}] {message}")
+    def log_warning(message: str, module: str = 'UserManager') -> None:
+        logger.warning(f"[{module}] {message}")
+    def log_error(message: str, module: str = 'UserManager') -> None:
+        logger.error(f"[{module}] {message}")
 except ImportError:
     # Для работы как отдельный модуль
     def log_info(message: str, module: str = 'UserManager') -> None:
@@ -25,8 +32,6 @@ except ImportError:
         from colorama import Fore, Style
         now = datetime.now().strftime('%H:%M:%S')
         print(f"{Fore.RED}[ERROR] {now} - [USERMANAGER] {message}{Style.RESET_ALL}")
-    
-    pass
 
 
 class UserManager:

@@ -7,7 +7,12 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 try:
-    from .logger import log_info, log_error
+    from .logger import get_logger
+    logger = get_logger('Database')
+    def log_info(message, module='Database'):
+        logger.info(f"[{module}] {message}")
+    def log_error(message, module='Database'):
+        logger.error(f"[{module}] {message}")
 except ImportError:
     # Для работы как отдельный модуль
     def log_info(message, module='Database'):
@@ -42,7 +47,7 @@ class DatabaseManager:
         
         # Создаем папку db если её нет
         db_dir = os.path.dirname(self.db_path)
-        if not os.path.exists(db_dir):
+        if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir)
             log_info(f"📁 Папка {db_dir} создана", module='Database')
         
