@@ -24,11 +24,37 @@ class ColoredFormatter(logging.Formatter):
         logging.DEBUG: Fore.CYAN,
     }
     
+    MODULE_COLORS = {
+        'CORE': Fore.GREEN,
+        'Telegram': Fore.MAGENTA,
+        'SMTP': Fore.BLUE,
+        'UserManager': Fore.CYAN,
+        'Database': Fore.BLUE,
+        'SystemInit': Fore.YELLOW,
+    }
+    
     def format(self, record: logging.LogRecord) -> str:
         """Форматирует сообщение с цветом"""
-        color = self.COLORS.get(record.levelno, Fore.WHITE)
-        record.msg = f"{color}{record.msg}{Style.RESET_ALL}"
-        return super().format(record)
+        # Сначала форматируем базовое сообщение
+        formatted = super().format(record)
+        
+        # Цвет для уровня логирования
+        level_color = self.COLORS.get(record.levelno, Fore.WHITE)
+        
+        # Цвет для модуля
+        module_color = self.MODULE_COLORS.get(record.name, Fore.WHITE)
+        
+        # Применяем цвета к частям сообщения
+        parts = formatted.split(' - ')
+        if len(parts) >= 4:
+            time_part = parts[0]
+            level_part = parts[1]
+            name_part = f"{module_color}{parts[2]}{Style.RESET_ALL}"
+            msg_part = f"{level_color}{parts[3]}{Style.RESET_ALL}"
+            return f"{time_part} - {level_part} - {name_part} - {msg_part}"
+        
+        # Fallback если формат неожиданный
+        return f"{level_color}{formatted}{Style.RESET_ALL}"
 
 
 class FileFormatter(logging.Formatter):
@@ -111,7 +137,7 @@ class Logger:
     def _setup_console_handler(self) -> None:
         """Настройка консольного обработчика"""
         console_handler = logging.StreamHandler()
-        console_handler.setFormatter(ColoredFormatter('%(asctime)s - %(levelname)s - %(message)s'))
+        console_handler.setFormatter(ColoredFormatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
         console_handler.addFilter(TechnicalLogFilter(debug_mode=(self.level == 'DEBUG')))
         logging.getLogger().addHandler(console_handler)
     
@@ -138,7 +164,7 @@ class Logger:
                 encoding='utf-8'
             )
             
-            file_handler.setFormatter(FileFormatter('%(asctime)s - %(levelname)s - %(message)s'))
+            file_handler.setFormatter(FileFormatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
             logging.getLogger().addHandler(file_handler)
         except Exception as e:
             print(f"[ERROR] Ошибка при настройке файлового логгера: {e}")
@@ -210,26 +236,26 @@ def get_logger(name: str = __name__) -> logging.Logger:
 
 def log_info(message: str, module: str = 'CORE') -> None:
     """Логирование информационного сообщения"""
-    logger = get_logger()
-    logger.info(f"[{module}] {message}")
+    logger = get_logger(module)
+    logger.info(message)
 
 
 def log_warning(message: str, module: str = 'CORE') -> None:
     """Логирование предупреждения"""
-    logger = get_logger()
-    logger.warning(f"[{module}] {message}")
+    logger = get_logger(module)
+    logger.warning(message)
 
 
 def log_error(message: str, module: str = 'CORE') -> None:
     """Логирование ошибки"""
-    logger = get_logger()
-    logger.error(f"[{module}] {message}")
+    logger = get_logger(module)
+    logger.error(message)
 
 
 def log_debug(message: str, module: str = 'CORE') -> None:
     """Логирование отладочной информации"""
-    logger = get_logger()
-    logger.debug(f"[{module}] {message}")
+    logger = get_logger(module)
+    logger.debug(message)
 
 
 def log_telegram(message: str) -> None:
