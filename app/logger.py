@@ -80,6 +80,16 @@ class TechnicalLogFilter(logging.Filter):
         'recip:'
     ]
     
+    # В DEBUG режиме показываем больше технической информации
+    DEBUG_KEYWORDS = [
+        'DEBUG:',
+        'Connection:',
+        'SMTP:',
+        'Telegram:',
+        'Database:',
+        'UserManager:'
+    ]
+    
     def __init__(self, debug_mode: bool = False):
         super().__init__()
         self.debug_mode = debug_mode
@@ -87,7 +97,12 @@ class TechnicalLogFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         """Фильтрует технические сообщения"""
         if self.debug_mode:
-            return True
+            # В DEBUG режиме пропускаем все сообщения с ключевыми словами DEBUG
+            message = record.getMessage()
+            if any(keyword in message for keyword in self.DEBUG_KEYWORDS):
+                return True
+            # Остальные технические сообщения фильтруем даже в DEBUG
+            return not any(keyword in message for keyword in self.TECHNICAL_KEYWORDS)
         
         message = record.getMessage()
         return not any(keyword in message for keyword in self.TECHNICAL_KEYWORDS)
@@ -201,9 +216,12 @@ class Logger:
         for logger_name in external_loggers:
             logger = logging.getLogger(logger_name)
             
+            # В DEBUG режиме включаем все логгеры
             if self.level == 'DEBUG':
                 logger.setLevel(logging.DEBUG)
+                logger.propagate = True  # Разрешаем пропагацию в DEBUG режиме
             else:
+                # В других режимах отключаем только в INFO и выше
                 logger.setLevel(logging.ERROR)
                 logger.propagate = False
                 # Удаляем все обработчики
@@ -212,7 +230,9 @@ class Logger:
     
     def get_logger(self, name: str) -> logging.Logger:
         """Получение логгера с указанным именем"""
-        return logging.getLogger(name)
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.DEBUG)
+        return logger
 
 
 # Глобальный экземпляр логгера
