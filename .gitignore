@@ -135,8 +135,7 @@ dmypy.json
 config.ini
 
 # User data
-db/authorized_users.txt
-db/user_filters.txt
+db/*.db
 
 # Logs
 *.log

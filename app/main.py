@@ -9,9 +9,11 @@ import re
 from colorama import init, Fore, Back, Style
 from datetime import datetime
 import os
-from config import get_telegram_token, get_authorized_users_file, get_user_filters_file, get_logging_level
+from config import get_telegram_token, get_authorized_users_file, get_user_filters_file, get_logging_level, get_admin_ids, get_database_path
 import time
 import requests
+from user_manager import UserManager
+from database import init_database
 
 def get_version():
     """Читает версию из файла VERSION"""
@@ -49,8 +51,16 @@ init()
 
 # Получаем токен из переменных окружения
 TELEGRAM_BOT_TOKEN = get_telegram_token()
-AUTHORIZED_USERS_FILE = get_authorized_users_file()
-USER_FILTERS_FILE = get_user_filters_file()
+ADMIN_IDS = get_admin_ids()
+DATABASE_PATH = get_database_path()
+
+# Для обратной совместимости (если нужны старые пути)
+try:
+    AUTHORIZED_USERS_FILE = get_authorized_users_file()
+    USER_FILTERS_FILE = get_user_filters_file()
+except RuntimeError:
+    AUTHORIZED_USERS_FILE = "db/authorized_users.txt"
+    USER_FILTERS_FILE = "db/user_filters.txt"
 
 # Получаем уровень логирования из конфигурации
 LOGGING_LEVEL = get_logging_level()
@@ -159,10 +169,14 @@ for handler in logging.root.handlers:
 
 logger = logging.getLogger(__name__)
 
-bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+# Удаляю глобальное создание bot
+# bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 # Глобальная переменная для контроля завершения бота
 stop_bot = False
+
+# Глобальная переменная для менеджера пользователей
+user_manager = None
 
 # Удаляем функцию check_user_input, так как она создает конфликты
 
@@ -176,7 +190,8 @@ def signal_handler(signum, frame):
         stop_bot = True
         # Останавливаем бота
         try:
-            bot.stop_polling()
+            # bot.stop_polling() # Удалено
+            pass
         except:
             pass
         log_info("Приложение завершено", module='CORE')
@@ -221,6 +236,8 @@ MODULE_COLORS = {
     'CORE': Fore.GREEN,
     'Telegram': Fore.MAGENTA,
     'SMTP': Fore.BLUE,
+    'UserManager': Fore.CYAN,
+    'Database': Fore.BLUE,
     'WARNING': Fore.YELLOW,
     'ERROR': Fore.RED,
     'DEBUG': Fore.CYAN
@@ -289,43 +306,39 @@ def process_string(s):
     return output
 
 def get_authorized_users():
-    try:
-        with open(AUTHORIZED_USERS_FILE, 'r') as f:
-            users = f.read().splitlines()
-            return [int(user_id) for user_id in users]
-    except FileNotFoundError:
-        return []
+    """Получение списка авторизованных пользователей"""
+    if user_manager is None:
+        return set()
+    return user_manager.get_authorized_users()
 
 def get_user_filters():
-    filters = {}
-    try:
-        with open(USER_FILTERS_FILE, 'r') as f:
-            for line in f:
-                if ':' in line:
-                    user_id, flt = line.strip().split(':', 1)
-                    filters[int(user_id)] = flt
-    except FileNotFoundError:
-        pass
-    return filters
+    """Получение фильтров пользователей"""
+    if user_manager is None:
+        return {}
+    return user_manager.get_user_filters()
 
 def set_user_filter(user_id, flt):
-    filters = get_user_filters()
-    filters[user_id] = flt
-    with open(USER_FILTERS_FILE, 'w') as f:
-        for uid, flt in filters.items():
-            f.write(f"{uid}:{flt}\n")
+    """Установка фильтра для пользователя"""
+    if user_manager is None:
+        return False
+    return user_manager.set_user_filter(user_id, flt)
 
 def remove_user_filter(user_id):
-    filters = get_user_filters()
-    if user_id in filters:
-        del filters[user_id]
-        with open(USER_FILTERS_FILE, 'w') as f:
-            for uid, flt in filters.items():
-                f.write(f"{uid}:{flt}\n")
-        return True
-    return False
+    """Удаление фильтра пользователя"""
+    if user_manager is None:
+        return False
+    return user_manager.remove_user_filter(user_id)
+
+def is_admin(user_id: int) -> bool:
+    """Проверка, является ли пользователь администратором"""
+    return user_id in ADMIN_IDS
 
 class SMTPHandler(Message):
+    def __init__(self, bot=None, user_manager=None):
+        super().__init__()
+        self.bot = bot
+        self.user_manager = user_manager
+    
     def handle_message(self, message):
         log_smtp("📧 Получено новое email сообщение")
         
@@ -358,34 +371,30 @@ class SMTPHandler(Message):
         # Отправляем только тело сообщения в Telegram
         msg_text = body
 
-        authorized_users = get_authorized_users()
-        user_filters = get_user_filters()
+        if self.user_manager:
+            authorized_users = self.user_manager.get_authorized_users()
+        else:
+            authorized_users = get_authorized_users()
         
         log_info(f"Отправка сообщения {len(authorized_users)} авторизованным пользователям", module='Telegram')
         log_debug(f"📋 Список авторизованных пользователей: {authorized_users}", module='Telegram')
-        log_debug(f"🔍 Активные фильтры пользователей: {user_filters}", module='Telegram')
         
         for user_id in authorized_users:
             try:
-                employee = re.search(r'Сотрудник:(.+)', msg_text)
-                employee_name = employee.group(1).strip() if employee else ""
-                flt = user_filters.get(user_id, None)
-                log_debug(f"👤 Обработка пользователя {user_id}, фильтр: {flt}, сотрудник: {employee_name}", module='Telegram')
-                
-                if flt:
-                    if flt.lower() in employee_name.lower():
-                        bot.send_message(user_id, process_string(msg_text))
-                        log_info(f"Сообщение отправлено пользователю {user_id} (фильтр: {flt})", module='Telegram')
+                # Проверяем, нужно ли отправлять сообщение пользователю
+                if self.user_manager and self.user_manager.should_send_message(user_id, msg_text):
+                    if self.bot:
+                        self.bot.send_message(user_id, process_string(msg_text))
+                        log_info(f"Сообщение отправлено пользователю {user_id}", module='Telegram')
                     else:
-                        log_info(f"Сообщение отфильтровано для пользователя {user_id} (фильтр: {flt}, сотрудник: {employee_name})", module='Telegram')
+                        log_error(f"Бот не инициализирован для отправки сообщения пользователю {user_id}", module='Telegram')
                 else:
-                    bot.send_message(user_id, process_string(msg_text))
-                    log_info(f"Сообщение отправлено пользователю {user_id}", module='Telegram')
+                    log_info(f"Сообщение отфильтровано для пользователя {user_id}", module='Telegram')
                     
             except Exception as e:
                 log_error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}", module='Telegram')
 
-def start_smtp_server():
+def start_smtp_server(bot=None, user_manager=None):
     log_info("🚀 Запуск SMTP сервера...", module='SMTP')
     
     # Отключаем логи aiosmtpd если не в DEBUG режиме
@@ -396,7 +405,7 @@ def start_smtp_server():
         logging.getLogger('aiosmtpd.controller').setLevel(logging.ERROR)
         logging.getLogger('aiosmtpd.handlers').setLevel(logging.ERROR)
     
-    handler = SMTPHandler()
+    handler = SMTPHandler(bot, user_manager)
     controller = Controller(handler, hostname='127.0.0.1', port=1025)
     controller.start()
     log_info("✅ SMTP сервер запущен на localhost:1025", module='SMTP')
@@ -409,29 +418,62 @@ def start_smtp_server():
         controller.stop()
         log_info("SMTP сервер остановлен", module='SMTP')
 
-def start_telegram_bot():
+def start_telegram_bot(bot, user_manager):
     log_info("🤖 Запуск Telegram бота...", module='Telegram')
     
     # Проверка подключения к Telegram API
-    check_telegram_bot()
+    check_telegram_bot(bot)
     
     @bot.message_handler(commands=['auth'])
     def handle_auth(message):
-        log_telegram(f"Попытка авторизации от пользователя {message.from_user.id}")
-        if message.text.strip() == '/auth 68233334':
-            user_id = message.from_user.id
-            authorized_users = get_authorized_users()
-            if user_id not in authorized_users:
-                with open(AUTHORIZED_USERS_FILE, 'a') as f:
-                    f.write(f"{user_id}\n")
-                log_info(f"Пользователь {user_id} успешно авторизован", module='Telegram')
-                bot.reply_to(message, "Вы успешно авторизованы!")
-            else:
-                log_info(f"Пользователь {user_id} уже авторизован", module='Telegram')
-                bot.reply_to(message, "Вы уже авторизованы.")
+        user_id = message.from_user.id
+        log_telegram(f"Запрос на авторизацию от пользователя {user_id}")
+        
+        # Проверяем, не авторизован ли уже пользователь
+        if user_manager.is_authorized(user_id):
+            bot.reply_to(message, "Вы уже авторизованы!")
+            return
+        
+        # Создаем запрос на авторизацию
+        request_id = user_manager.create_auth_request(
+            user_id=user_id,
+            username=message.from_user.username,
+            first_name=message.from_user.first_name,
+            last_name=message.from_user.last_name,
+            request_text="Запрос на авторизацию"
+        )
+        
+        if request_id:
+            # Отправляем уведомления администраторам
+            for admin_id in ADMIN_IDS:
+                try:
+                    # Создаем inline клавиатуру
+                    from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+                    keyboard = InlineKeyboardMarkup()
+                    keyboard.add(
+                        InlineKeyboardButton("✅ Одобрить", callback_data=f"auth_approve_{request_id}"),
+                        InlineKeyboardButton("❌ Отклонить", callback_data=f"auth_reject_{request_id}")
+                    )
+                    
+                    # Формируем сообщение с информацией о пользователе
+                    user_info = f"👤 Запрос на авторизацию\n\n"
+                    user_info += f"ID: {user_id}\n"
+                    if message.from_user.username:
+                        user_info += f"Username: @{message.from_user.username}\n"
+                    if message.from_user.first_name:
+                        user_info += f"Имя: {message.from_user.first_name}\n"
+                    if message.from_user.last_name:
+                        user_info += f"Фамилия: {message.from_user.last_name}\n"
+                    user_info += f"Время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                    
+                    bot.send_message(admin_id, user_info, reply_markup=keyboard)
+                    log_info(f"Уведомление отправлено администратору {admin_id}", module='Telegram')
+                except Exception as e:
+                    log_error(f"Ошибка отправки уведомления администратору {admin_id}: {e}", module='Telegram')
+            
+            bot.reply_to(message, "Ваш запрос на авторизацию отправлен администраторам. Ожидайте ответа.")
         else:
-            log_warning(f"Неудачная попытка авторизации от пользователя {message.from_user.id}", module='Telegram')
-            bot.reply_to(message, "Неверный код авторизации.")
+            bot.reply_to(message, "Ошибка создания запроса на авторизацию. Попробуйте позже.")
 
     @bot.message_handler(commands=['filter'])
     def handle_filter(message):
@@ -455,6 +497,114 @@ def start_telegram_bot():
         else:
             log_info(f"Попытка отключить несуществующий фильтр от пользователя {message.from_user.id}", module='Telegram')
             bot.reply_to(message, "У вас не было установлено фильтра.")
+
+    @bot.message_handler(commands=['add_user'])
+    def handle_add_user(message):
+        user_id = message.from_user.id
+        
+        # Проверяем права администратора
+        if not is_admin(user_id):
+            bot.reply_to(message, "У вас нет прав для выполнения этой команды.")
+            return
+        
+        # Парсим команду: /add_user 123456789
+        args = message.text.split(maxsplit=1)
+        if len(args) != 2:
+            bot.reply_to(message, "Используйте: /add_user ID_пользователя")
+            return
+        
+        try:
+            target_user_id = int(args[1].strip())
+            
+            # Добавляем пользователя
+            if user_manager is None:
+                bot.reply_to(message, "Система управления пользователями недоступна.")
+                return
+                
+            if user_manager.add_authorized_user(target_user_id, added_by=user_id):
+                bot.reply_to(message, f"Пользователь {target_user_id} успешно добавлен.")
+            else:
+                bot.reply_to(message, f"Пользователь {target_user_id} уже авторизован или произошла ошибка.")
+                
+        except ValueError:
+            bot.reply_to(message, "Неверный формат ID пользователя. Используйте только цифры.")
+        except Exception as e:
+            log_error(f"Ошибка добавления пользователя: {e}", module='Telegram')
+            bot.reply_to(message, "Произошла ошибка при добавлении пользователя.")
+
+    @bot.message_handler(commands=['list_users'])
+    def handle_list_users(message):
+        user_id = message.from_user.id
+        
+        # Проверяем права администратора
+        if not is_admin(user_id):
+            bot.reply_to(message, "У вас нет прав для выполнения этой команды.")
+            return
+        
+        if user_manager is None:
+            bot.reply_to(message, "Система управления пользователями недоступна.")
+            return
+            
+        users = user_manager.get_all_users_info()
+        if not users:
+            bot.reply_to(message, "Список авторизованных пользователей пуст.")
+            return
+        
+        response = "📋 Список авторизованных пользователей:\n\n"
+        for user in users:
+            name = f"{user['first_name'] or ''} {user['last_name'] or ''}".strip() or user['username'] or f"User{user['user_id']}"
+            response += f"• {user['user_id']}: {name}\n"
+        
+        bot.reply_to(message, response)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('auth_'))
+    def handle_auth_callback(call):
+        user_id = call.from_user.id
+        
+        # Проверяем права администратора
+        if not is_admin(user_id):
+            bot.answer_callback_query(call.id, "У вас нет прав для выполнения этой операции.")
+            return
+        
+        # Парсим callback data
+        parts = call.data.split('_')
+        if len(parts) != 3:
+            bot.answer_callback_query(call.id, "Неверный формат callback данных.")
+            return
+        
+        action = parts[1]  # approve или reject
+        request_id = int(parts[2])
+        
+        # Обрабатываем запрос
+        if user_manager is None:
+            bot.answer_callback_query(call.id, "Система авторизации недоступна.")
+            return
+        
+        # Получаем информацию о запросе ДО его обработки
+        target_user_id = user_manager.get_auth_request_user_id(request_id)
+        
+        approved = (action == 'approve')
+        success = user_manager.process_auth_request(request_id, approved, user_id)
+        
+        if success and target_user_id:
+            status_text = "одобрена" if approved else "отклонена"
+            notification_text = f"✅ Ваша заявка на авторизацию {status_text}!"
+            if approved:
+                notification_text += "\n\nТеперь вы можете получать уведомления о событиях УРВ."
+            bot.send_message(target_user_id, notification_text)
+            
+            # Обновляем сообщение администратора
+            status_emoji = "✅" if approved else "❌"
+            status_text = "одобрена" if approved else "отклонена"
+            bot.edit_message_text(
+                f"{status_emoji} Заявка {status_text}",
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id
+            )
+            
+            bot.answer_callback_query(call.id, f"Заявка {status_text}")
+        else:
+            bot.answer_callback_query(call.id, "Ошибка обработки заявки. Возможно, она уже обработана.")
 
     # Обработчик ошибок Telegram
     @bot.message_handler(func=lambda message: True)
@@ -506,19 +656,23 @@ def check_configuration():
     # Проверка токена Telegram
     if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN == "YOUR_BOT_TOKEN":
         log_error("❌ Не установлен токен Telegram бота в config.ini", module='CORE')
-        log_error("   Добавьте ваш токен в секцию [telegram] -> token", module='CORE')
+        log_error("   Добавьте ваш токен в секцию [Telegram] -> bot_token", module='CORE')
         os._exit(1)
     
-    # Проверка файлов данных
+    # Проверка администраторов
+    if not ADMIN_IDS:
+        log_warning("⚠️  Не настроены администраторы в config.ini", module='CORE')
+        log_warning("   Добавьте ID администраторов в секцию [Admins] -> admin_ids", module='CORE')
+    
+    # Проверка базы данных
     try:
-        # Проверяем, что можем создать/записать в файлы
-        test_content = "test"
-        with open(AUTHORIZED_USERS_FILE, 'a') as f:
-            f.write("")
-        with open(USER_FILTERS_FILE, 'a') as f:
-            f.write("")
+        # Проверяем, что можем создать/записать в базу данных
+        db_dir = os.path.dirname(DATABASE_PATH)
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir)
+            log_info(f"📁 Создана папка для базы данных: {db_dir}", module='CORE')
     except Exception as e:
-        log_error(f"❌ Ошибка доступа к файлам данных: {e}", module='CORE')
+        log_error(f"❌ Ошибка доступа к базе данных: {e}", module='CORE')
         os._exit(1)
     
     log_info("✅ Конфигурация корректна", module='CORE')
@@ -542,7 +696,7 @@ def check_smtp_server():
         log_error(f"❌ Ошибка проверки порта SMTP: {e}", module='SMTP')
         os._exit(1)
 
-def check_telegram_bot():
+def check_telegram_bot(bot):
     """Проверка подключения к Telegram API"""
     try:
         # Пробуем получить информацию о боте
@@ -577,23 +731,20 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # Создаем папку db если её нет
-    if not os.path.exists('db'):
-        os.makedirs('db')
-        log_info("📁 Папка db создана", module='CORE')
+    # Инициализация базы данных
+    log_info("🗄️  Инициализация базы данных...", module='CORE')
+    db = init_database(DATABASE_PATH)
     
-    # Создаем файлы данных если их нет
-    if not os.path.exists(AUTHORIZED_USERS_FILE):
-        with open(AUTHORIZED_USERS_FILE, 'w', encoding='utf-8') as f:
-            pass  # Создаем пустой файл
-        log_info(f"📄 Файл {AUTHORIZED_USERS_FILE} создан", module='CORE')
+    # Создаем менеджер пользователей после инициализации БД
+    global user_manager
+    user_manager = UserManager(db)
+    log_info("✅ Менеджер пользователей инициализирован", module='CORE')
     
-    if not os.path.exists(USER_FILTERS_FILE):
-        with open(USER_FILTERS_FILE, 'w', encoding='utf-8') as f:
-            pass  # Создаем пустой файл
-        log_info(f"📄 Файл {USER_FILTERS_FILE} создан", module='CORE')
+    # Создаем бота
+    bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
     
-    smtp_thread = threading.Thread(target=start_smtp_server)
+    # Запускаем SMTP сервер с передачей бота и user_manager
+    smtp_thread = threading.Thread(target=start_smtp_server, args=(bot, user_manager))
     smtp_thread.daemon = True  # Поток завершится при закрытии основного потока
     smtp_thread.start()
 
@@ -603,17 +754,14 @@ def main():
         # Небольшая задержка для запуска SMTP сервера
         time.sleep(1)
         
-        start_telegram_bot()  # Запускаем бота в основном потоке
+        start_telegram_bot(bot, user_manager)  # Запускаем бота в основном потоке
     except KeyboardInterrupt:
         log_warning("Получен сигнал CTRL-C (KeyboardInterrupt). Завершение работы...", module='CORE')
         # Устанавливаем флаг для завершения бота
         global stop_bot
         stop_bot = True
         # Останавливаем бота
-        try:
-            bot.stop_polling()
-        except:
-            pass
+        # bot.stop_polling()  # bot теперь локальный в start_telegram_bot
         log_info("Приложение корректно завершено", module='CORE')
         os._exit(0)  # Принудительное завершение
 

@@ -14,6 +14,12 @@ def get_config():
             '[Telegram]\n'
             'bot_token = ваш_токен_бота_здесь\n'
             '\n'
+            '[Admins]\n'
+            'admin_ids = 123456789,987654321\n'
+            '\n'
+            '[Database]\n'
+            'db_path = db/users.db\n'
+            '\n'
             '[Paths]\n'
             'authorized_users_file = db/authorized_users.txt\n'
             'user_filters_file = db/user_filters.txt'
@@ -42,6 +48,47 @@ def get_telegram_token():
         )
     
     return token
+
+def get_admin_ids():
+    """Получение списка ID администраторов"""
+    config = get_config()
+    
+    if 'Admins' not in config:
+        # Возвращаем пустой список если секция не найдена
+        return []
+    
+    admin_ids_str = config.get('Admins', 'admin_ids', fallback='')
+    
+    if not admin_ids_str:
+        return []
+    
+    try:
+        # Разбираем строку с ID через запятую
+        admin_ids = []
+        for admin_id in admin_ids_str.split(','):
+            admin_id = admin_id.strip()
+            if admin_id and admin_id.isdigit():
+                admin_ids.append(int(admin_id))
+        return admin_ids
+    except Exception as e:
+        print(f"⚠️  Ошибка парсинга ID администраторов: {e}")
+        return []
+
+def get_database_path():
+    """Получение пути к базе данных"""
+    config = get_config()
+    
+    if 'Database' not in config:
+        # Возвращаем путь по умолчанию относительно корня проекта
+        return str(Path(__file__).parent.parent / 'db' / 'users.db')
+    
+    db_path = config.get('Database', 'db_path', fallback='db/users.db')
+    
+    # Если путь относительный, делаем его абсолютным относительно корня проекта
+    if not os.path.isabs(db_path):
+        return str(Path(__file__).parent.parent / db_path)
+    
+    return db_path
 
 def get_authorized_users_file():
     config = get_config()
