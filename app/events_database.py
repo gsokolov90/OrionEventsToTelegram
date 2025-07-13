@@ -71,23 +71,19 @@ class EventsDatabaseManager:
         """Создает все необходимые таблицы"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
-        # Схема базы данных событий
+        # Новая схема базы данных событий
         schema = {
             'events': '''
                 CREATE TABLE IF NOT EXISTS events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     employee_name TEXT NOT NULL,
                     direction TEXT NOT NULL,
-                    event_time TEXT NOT NULL,
-                    full_time TEXT NOT NULL,
+                    event_timestamp TIMESTAMP NOT NULL,
                     raw_message TEXT NOT NULL,
-                    processed_message TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    processed_message TEXT NOT NULL
                 )
             '''
         }
-        
         # Создаем таблицы
         for table_name, create_sql in schema.items():
             try:
@@ -95,7 +91,6 @@ class EventsDatabaseManager:
                 log_info(f"✅ Таблица событий '{table_name}' готова", module='EventsDatabase')
             except Exception as e:
                 log_error(f"Ошибка создания таблицы событий '{table_name}': {e}", module='EventsDatabase')
-        
         conn.commit()
         conn.close()
         log_info(f"✅ База данных событий {self.db_path} инициализирована", module='EventsDatabase')
@@ -104,23 +99,25 @@ class EventsDatabaseManager:
         """Получение соединения с базой данных"""
         return sqlite3.connect(self.db_path)
     
-    def add_event(self, employee_name: str, direction: str, event_time: str, 
-                  full_time: str, raw_message: str, processed_message: str) -> bool:
-        """Добавление нового события в базу данных"""
+    def add_event(self, employee_name: str, direction: str, event_timestamp, raw_message: str, processed_message: str) -> bool:
+        """Добавление нового события в базу данных (event_timestamp — datetime или unixtime)"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
-            
+            # event_timestamp должен быть строкой в формате ISO или unixtime (int)
+            if isinstance(event_timestamp, int):
+                ts = datetime.fromtimestamp(event_timestamp).isoformat(sep=' ')
+            elif isinstance(event_timestamp, datetime):
+                ts = event_timestamp.isoformat(sep=' ')
+            else:
+                ts = str(event_timestamp)
             cursor.execute("""
-                INSERT INTO events (employee_name, direction, event_time, full_time, 
-                                  raw_message, processed_message)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (employee_name, direction, event_time, full_time, raw_message, processed_message))
-            
+                INSERT INTO events (employee_name, direction, event_timestamp, raw_message, processed_message)
+                VALUES (?, ?, ?, ?, ?)
+            """, (employee_name, direction, ts, raw_message, processed_message))
             conn.commit()
             conn.close()
-            
-            log_info(f"✅ Событие добавлено: {employee_name} - {direction} в {event_time}", module='EventsDatabase')
+            log_info(f"✅ Событие добавлено: {employee_name} - {direction} в {ts}", module='EventsDatabase')
             return True
         except Exception as e:
             log_error(f"Ошибка добавления события: {e}", module='EventsDatabase')
@@ -131,68 +128,85 @@ class EventsDatabaseManager:
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
-            
             cursor.execute("""
-                SELECT id, employee_name, direction, event_time, full_time, 
-                       raw_message, processed_message, created_at
+                SELECT id, employee_name, direction, event_timestamp, raw_message, processed_message
                 FROM events 
                 WHERE employee_name LIKE ? 
-                ORDER BY created_at DESC 
+                ORDER BY event_timestamp DESC 
                 LIMIT ?
             """, (f"%{employee_name}%", limit))
-            
             events = []
             for row in cursor.fetchall():
                 events.append({
                     'id': row[0],
                     'employee_name': row[1],
                     'direction': row[2],
-                    'event_time': row[3],
-                    'full_time': row[4],
-                    'raw_message': row[5],
-                    'processed_message': row[6],
-                    'created_at': row[7]
+                    'event_timestamp': row[3],
+                    'raw_message': row[4],
+                    'processed_message': row[5]
                 })
-            
             conn.close()
             return events
         except Exception as e:
             log_error(f"Ошибка получения событий по сотруднику: {e}", module='EventsDatabase')
             return []
     
-    def get_events_by_date_range(self, start_date: datetime, end_date: datetime, 
-                                limit: int = 100) -> List[Dict[str, Any]]:
+    def get_events_by_date_range(self, start_date: datetime, end_date: datetime, limit: int = 100) -> List[Dict[str, Any]]:
         """Получение событий по диапазону дат"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
-            
             cursor.execute("""
-                SELECT id, employee_name, direction, event_time, full_time, 
-                       raw_message, processed_message, created_at
+                SELECT id, employee_name, direction, event_timestamp, raw_message, processed_message
                 FROM events 
-                WHERE created_at BETWEEN ? AND ?
-                ORDER BY created_at DESC 
+                WHERE event_timestamp BETWEEN ? AND ?
+                ORDER BY event_timestamp DESC 
                 LIMIT ?
-            """, (start_date.isoformat(), end_date.isoformat(), limit))
-            
+            """, (start_date.isoformat(sep=' '), end_date.isoformat(sep=' '), limit))
             events = []
             for row in cursor.fetchall():
                 events.append({
                     'id': row[0],
                     'employee_name': row[1],
                     'direction': row[2],
-                    'event_time': row[3],
-                    'full_time': row[4],
-                    'raw_message': row[5],
-                    'processed_message': row[6],
-                    'created_at': row[7]
+                    'event_timestamp': row[3],
+                    'raw_message': row[4],
+                    'processed_message': row[5]
                 })
-            
             conn.close()
             return events
         except Exception as e:
             log_error(f"Ошибка получения событий по диапазону дат: {e}", module='EventsDatabase')
+            return []
+    
+    def get_events_by_employee_and_period(self, employee_name: str, days: int = 30) -> List[Dict[str, Any]]:
+        """Получение событий по сотруднику за последние N дней"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days)
+            cursor.execute("""
+                SELECT id, employee_name, direction, event_timestamp, raw_message, processed_message
+                FROM events 
+                WHERE employee_name LIKE ? 
+                  AND event_timestamp BETWEEN ? AND ?
+                ORDER BY event_timestamp ASC
+            """, (f"%{employee_name}%", start_date.isoformat(sep=' '), end_date.isoformat(sep=' ')))
+            events = []
+            for row in cursor.fetchall():
+                events.append({
+                    'id': row[0],
+                    'employee_name': row[1],
+                    'direction': row[2],
+                    'event_timestamp': row[3],
+                    'raw_message': row[4],
+                    'processed_message': row[5]
+                })
+            conn.close()
+            return events
+        except Exception as e:
+            log_error(f"Ошибка получения событий по сотруднику и периоду: {e}", module='EventsDatabase')
             return []
     
     def cleanup_old_events(self, retention_days: int) -> int:
@@ -207,8 +221,8 @@ class EventsDatabaseManager:
             # Получаем количество записей для удаления
             cursor.execute("""
                 SELECT COUNT(*) FROM events 
-                WHERE created_at < ?
-            """, (cutoff_date.isoformat(),))
+                WHERE event_timestamp < ?
+            """, (cutoff_date.isoformat(sep=' '),))
             
             count_to_delete = cursor.fetchone()[0]
             
@@ -216,8 +230,8 @@ class EventsDatabaseManager:
                 # Удаляем старые записи
                 cursor.execute("""
                     DELETE FROM events 
-                    WHERE created_at < ?
-                """, (cutoff_date.isoformat(),))
+                    WHERE event_timestamp < ?
+                """, (cutoff_date.isoformat(sep=' '),))
                 
                 conn.commit()
                 log_info(f"🗑️  Удалено {count_to_delete} старых записей событий (старше {retention_days} дней)", module='EventsDatabase')
@@ -254,9 +268,9 @@ class EventsDatabaseManager:
             
             # Последнее событие
             cursor.execute("""
-                SELECT created_at, employee_name, direction 
+                SELECT event_timestamp, employee_name, direction 
                 FROM events 
-                ORDER BY created_at DESC 
+                ORDER BY event_timestamp DESC 
                 LIMIT 1
             """)
             last_event = cursor.fetchone()
@@ -268,7 +282,7 @@ class EventsDatabaseManager:
                 'unique_employees': unique_employees,
                 'direction_stats': direction_stats,
                 'last_event': {
-                    'created_at': last_event[0],
+                    'event_timestamp': last_event[0],
                     'employee_name': last_event[1],
                     'direction': last_event[2]
                 } if last_event else None

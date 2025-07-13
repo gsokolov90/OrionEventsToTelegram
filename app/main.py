@@ -272,24 +272,27 @@ class SMTPHandler(Message):
         # Сохраняем событие в базу данных
         if self.events_db:
             try:
-                # Парсим данные из сообщения
-                time_match = re.search(r'\b(\d{1,2}:\d{2}):\d{2}\b', body)
+                # Парсим дату и время события
+                dt_match = re.match(r'(\d{2}\.\d{2}\.\d{4}) (\d{2}:\d{2}:\d{2})', body)
+                event_date = dt_match.group(1) if dt_match else None
+                event_time = dt_match.group(2) if dt_match else None
                 direction_match = re.search(r'режим:(\S+)', body)
-                
-                event_time = time_match.group(1) if time_match else ""
-                full_time = time_match.group(0) if time_match else ""
                 direction = direction_match.group(1) if direction_match else ""
                 
                 # Создаем обработанное сообщение для Telegram
                 processed_message = process_string(body)
                 
                 # Сохраняем в базу данных
-                if employee_name and direction and event_time:
+                if employee_name and direction and event_date and event_time:
+                    from datetime import datetime
+                    try:
+                        event_timestamp = datetime.strptime(f"{event_date} {event_time}", "%d.%m.%Y %H:%M:%S")
+                    except Exception:
+                        event_timestamp = datetime.now()
                     success = self.events_db.add_event(
                         employee_name=employee_name,
                         direction=direction,
-                        event_time=event_time,
-                        full_time=full_time,
+                        event_timestamp=event_timestamp,
                         raw_message=body,
                         processed_message=processed_message
                     )
@@ -298,7 +301,7 @@ class SMTPHandler(Message):
                     else:
                         log_error(f"❌ Ошибка сохранения события в базу данных: {employee_name}", module='EventsDatabase')
                 else:
-                    log_warning(f"⚠️  Неполные данные для сохранения события: сотрудник='{employee_name}', направление='{direction}', время='{event_time}'", module='EventsDatabase')
+                    log_warning(f"⚠️  Неполные данные для сохранения события: сотрудник='{employee_name}', направление='{direction}', дата='{event_date}', время='{event_time}'", module='EventsDatabase')
             except Exception as e:
                 log_error(f"❌ Ошибка обработки события для базы данных: {e}", module='EventsDatabase')
         
@@ -551,6 +554,86 @@ def start_telegram_bot(bot, user_manager):
         else:
             bot.answer_callback_query(call.id, "Ошибка обработки заявки. Возможно, она уже обработана.")
 
+    @bot.message_handler(commands=['report'])
+    def handle_report(message):
+        args = message.text.split(maxsplit=1)
+        if len(args) != 2:
+            bot.reply_to(message, "Используйте: /report <фамилия или часть фамилии>")
+            return
+        surname = args[1].strip()
+        
+        # Получаем полное имя сотрудника из базы данных
+        from app.config import get_events_database_path
+        from app.events_database import EventsDatabaseManager
+        db_path = get_events_database_path()
+        events_db = EventsDatabaseManager(db_path)
+        full_name = get_full_employee_name(events_db, surname)
+        
+        if not full_name:
+            bot.reply_to(message, f"Сотрудник с фамилией '{surname}' не найден в базе данных.")
+            return
+        
+        from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+        keyboard = InlineKeyboardMarkup()
+        keyboard.add(
+            InlineKeyboardButton("1 месяц", callback_data=f"report_period:{surname}:30"),
+            InlineKeyboardButton("3 месяца", callback_data=f"report_period:{surname}:90"),
+            InlineKeyboardButton("6 месяцев", callback_data=f"report_period:{surname}:180")
+        )
+        bot.reply_to(message, f"Выберите период для отчета по сотруднику: {full_name}", reply_markup=keyboard)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('report_period:'))
+    def handle_report_period(call):
+        try:
+            _, surname, days = call.data.split(':')
+            days = int(days)
+        except Exception:
+            bot.answer_callback_query(call.id, "Ошибка выбора периода.")
+            return
+        bot.answer_callback_query(call.id, "Формирую отчет...")
+        # Получаем путь к БД событий
+        from app.config import get_events_database_path
+        from app.events_database import EventsDatabaseManager
+        db_path = get_events_database_path()
+        events_db = EventsDatabaseManager(db_path)
+        # Получаем полное имя сотрудника из базы данных
+        full_surname = get_full_employee_name(events_db, surname)
+        events = events_db.get_events_by_employee_and_period(full_surname, days)
+        if not events:
+            bot.send_message(call.message.chat.id, f"Нет событий по сотруднику '{full_surname}' за выбранный период.")
+            return
+        # Генерируем HTML-отчет
+        html_content = generate_html_report(events, full_surname, days)
+        # Определяем дату конца периода для имени файла
+        from datetime import datetime
+        events_sorted = sorted(events, key=lambda e: e['event_timestamp'])
+        if events_sorted:
+            last_event = events_sorted[-1]
+            ts = last_event['event_timestamp']
+            if isinstance(ts, str):
+                try:
+                    ts_dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    ts_dt = datetime.fromisoformat(ts)
+            else:
+                ts_dt = ts
+            date_to = ts_dt.date()
+        else:
+            from datetime import date as dtdate
+            date_to = dtdate.today()
+        filename = get_report_filename(full_surname, days, date_to)
+        # Сохраняем во временный файл
+        import tempfile
+        with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as tmp:
+            tmp.write(html_content)
+            tmp_path = tmp.name
+        # Отправляем файл
+        with open(tmp_path, 'rb') as f:
+            bot.send_document(call.message.chat.id, f, caption=f"ОТЧЕТ УРВ по сотруднику: {full_surname}", visible_file_name=filename)
+        # Удаляем временный файл
+        import os
+        os.remove(tmp_path)
+
     # Обработчик ошибок Telegram
     @bot.message_handler(func=lambda message: True)
     def handle_all_messages(message):
@@ -689,6 +772,226 @@ def check_telegram_bot(bot):
         log_error(f"❌ Критическая ошибка подключения к Telegram API: {e}", module='Telegram')
         log_error("   Проверьте токен бота и интернет-соединение", module='Telegram')
         return False
+
+def get_full_employee_name(events_db, surname):
+    """Получение полного имени сотрудника из базы данных"""
+    try:
+        # Получаем уникальные имена сотрудников, содержащие surname
+        conn = events_db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT employee_name 
+            FROM events 
+            WHERE employee_name LIKE ? 
+            ORDER BY employee_name
+            LIMIT 1
+        """, (f"%{surname}%",))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return result[0]  # Возвращаем полное имя из БД
+        else:
+            return surname  # Если не найдено, возвращаем исходное
+    except Exception as e:
+        log_error(f"Ошибка получения полного имени сотрудника: {e}", module='EventsDatabase')
+        return surname
+
+def generate_html_report(events, surname, days):
+    from datetime import datetime, timedelta, date
+    from collections import defaultdict, OrderedDict
+    import os
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    
+    # Получаем текущее время для подвала
+    generation_time = datetime.now().strftime('%d.%m.%Y в %H:%M')
+    
+    # Преобразуем все event_timestamp к datetime
+    for event in events:
+        ts = event['event_timestamp']
+        if isinstance(ts, str):
+            try:
+                ts_dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                ts_dt = datetime.fromisoformat(ts)
+        else:
+            ts_dt = ts
+        event['ts_dt'] = ts_dt
+    # Сортируем события по времени
+    events_sorted = sorted(events, key=lambda e: e['ts_dt'])
+    # Сначала формируем все пары вход-выход
+    pairs = []
+    incomplete_shifts = []  # Для неполных смен в старых днях
+    i = 0
+    n = len(events_sorted)
+    while i < n:
+        ev = events_sorted[i]
+        if ev['direction'].lower() == 'вход':
+            entry = ev
+            entry_date = entry['ts_dt'].date()
+            # ищем ближайший выход после входа
+            exit_ev = None
+            for j in range(i+1, n):
+                if events_sorted[j]['direction'].lower() == 'выход':
+                    exit_ev = events_sorted[j]
+                    break
+            if exit_ev:
+                # Полная пара вход-выход
+                pairs.append((entry, exit_ev))
+                i = events_sorted.index(exit_ev, i+1) + 1
+            else:
+                # Нет выхода
+                if entry_date >= yesterday:
+                    # Для текущего и вчерашнего дня - пропускаем незавершенные смены
+                    i += 1
+                else:
+                    # Для более старых дней - добавляем как неполную смену
+                    incomplete_shifts.append((entry, None))
+                    i += 1
+        else:
+            i += 1
+    # Группируем пары по дате входа
+    day_blocks = OrderedDict()
+    total_in = total_out = work_days = 0
+    total_work_time = timedelta()
+    weekday_ru = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
+    
+    # Обрабатываем полные пары
+    for entry, exit_ev in pairs:
+        entry_date = entry['ts_dt'].date()
+        if entry_date not in day_blocks:
+            day_blocks[entry_date] = {
+                'weekday': entry['ts_dt'].weekday(),
+                'work_time': timedelta(),
+                'events': [],
+                'weekday_str': weekday_ru[entry['ts_dt'].weekday()]
+            }
+        # Добавляем событие входа
+        day_blocks[entry_date]['events'].append({
+            'type': 'in', 
+            'time': entry['ts_dt'].strftime('%H:%M')
+        })
+        total_in += 1
+        # Добавляем событие выхода
+        out_time = exit_ev['ts_dt'].strftime('%H:%M')
+        # Проверяем, является ли это ночной сменой
+        is_night_shift = exit_ev['ts_dt'].date() != entry['ts_dt'].date()
+        day_blocks[entry_date]['events'].append({
+            'type': 'out', 
+            'time': out_time,
+            'is_night_shift': is_night_shift
+        })
+        total_out += 1
+        # Считаем рабочее время
+        delta = exit_ev['ts_dt'] - entry['ts_dt']
+        if delta.total_seconds() > 0:
+            day_blocks[entry_date]['work_time'] += delta
+    
+    # Обрабатываем неполные смены (только для старых дней)
+    for entry, exit_ev in incomplete_shifts:
+        entry_date = entry['ts_dt'].date()
+        if entry_date not in day_blocks:
+            day_blocks[entry_date] = {
+                'weekday': entry['ts_dt'].weekday(),
+                'work_time': timedelta(),
+                'events': [],
+                'weekday_str': weekday_ru[entry['ts_dt'].weekday()]
+            }
+        # Добавляем событие входа с пометкой
+        day_blocks[entry_date]['events'].append({
+            'type': 'in', 
+            'time': entry['ts_dt'].strftime('%H:%M')
+        })
+        total_in += 1
+        # Добавляем пометку о том, что нет выхода
+        day_blocks[entry_date]['events'].append({
+            'type': 'no_exit', 
+            'time': 'Нет выхода'
+        })
+    
+    # Формируем строки времени и статистику
+    for d in day_blocks:
+        work_time = day_blocks[d]['work_time']
+        work_time_str = f"{work_time.seconds//3600}ч {(work_time.seconds%3600)//60}м" if work_time else "-"
+        day_blocks[d]['work_time_str'] = work_time_str
+        if work_time_str != '-':
+            work_days += 1
+            try:
+                h, m = [int(x[:-1]) for x in work_time_str.split()]
+                total_work_time += timedelta(hours=h, minutes=m)
+            except Exception:
+                pass
+    # Сортируем дни по убыванию
+    sorted_dates = sorted(day_blocks.keys(), reverse=True)
+    # Для периода
+    if sorted_dates:
+        period_start = min(sorted_dates)
+        period_end = max(sorted_dates)
+    else:
+        period_start = period_end = today
+    # Детализация по дням
+    details = ""
+    for d in sorted_dates:
+        block = day_blocks[d]
+        events_in_block = block['events']
+        work_time_str = block['work_time_str']
+        weekday = block['weekday_str']
+        details += f"<div class='day-block'>"
+        details += f"<div class='day-header-row'><div class='day-header'><svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M19 3H5C3.89 3 3 3.89 3 5V19C3 20.11 3.89 21 5 21H19C20.11 21 21 20.11 21 19V5C21 3.89 20.11 3 19 3M19 19H5V9H19V19M19 7H5V5H19V7Z' fill='currentColor'/></svg>{d.strftime('%d.%m.%Y')} ({weekday})</div><div class='day-time'>{work_time_str}</div></div>"
+        details += "<table class='day-table'><tr><th>Время</th><th>Событие</th></tr>"
+        for ev in events_in_block:
+            if ev['type'] == 'in':
+                details += f"<tr><td class='time'><span class='time-value'>{ev['time']}</span></td><td class='event-in'><svg width='16' height='16' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M8.59 16.59L13.17 12L8.59 7.41L10 6L16 12L10 18L8.59 16.59Z' fill='currentColor'/></svg>Вход</td></tr>"
+            elif ev['type'] == 'out':
+                night_shift_mark = ""
+                if ev.get('is_night_shift', False):
+                    night_shift_mark = "<span class='night-shift'>+1</span>"
+                details += f"<tr><td class='time'><span class='time-value'>{ev['time']}</span>{night_shift_mark}</td><td class='event-out'><svg width='16' height='16' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M15.41 16.59L10.83 12L15.41 7.41L14 6L8 12L14 18L15.41 16.59Z' fill='currentColor'/></svg>Выход</td></tr>"
+            elif ev['type'] == 'no_exit':
+                details += f"<tr><td class='time'>-</td><td class='event-no-exit'><svg width='16' height='16' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2M12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20M12 6C10.9 6 10 6.9 10 8C10 9.1 10.9 10 12 10C13.1 10 14 9.1 14 8C14 6.9 13.1 6 12 6M12 12C10.9 12 10 12.9 10 14C10 15.1 10.9 16 12 16C13.1 16 14 15.1 14 14C14 12.9 13.1 12 12 12Z' fill='currentColor'/></svg>Нет выхода</td></tr>"
+        details += "</table></div>"
+    # Среднее время
+    avg_work_time = total_work_time / work_days if work_days else timedelta()
+    avg_hours = int(avg_work_time.total_seconds() // 3600)
+    avg_minutes = int((avg_work_time.total_seconds() % 3600) // 60)
+    # Определяем период строкой
+    if days == 30:
+        period = '1 месяц'
+    elif days == 90:
+        period = '3 месяца'
+    elif days == 180:
+        period = '6 месяцев'
+    else:
+        period = f'{days} дней'
+    # Читаем шаблон
+    template_path = os.path.join(os.path.dirname(__file__), 'templates', 'report_template.html')
+    with open(template_path, 'r', encoding='utf-8') as f:
+        template = f.read()
+    html = template.replace('{{surname}}', surname)
+    html = html.replace('{{period}}', f"{period_start.strftime('%d.%m.%Y')} — {period_end.strftime('%d.%m.%Y')}")
+    html = html.replace('{{total_in}}', str(total_in))
+    html = html.replace('{{total_out}}', str(total_out))
+    html = html.replace('{{work_days}}', str(work_days))
+    html = html.replace('{{avg_hours}}', str(avg_hours))
+    html = html.replace('{{avg_minutes}}', str(avg_minutes))
+    html = html.replace('{{details}}', details)
+    html = html.replace('{{generation_time}}', generation_time)
+    return html
+
+def get_report_filename(surname, days, date_to):
+    # date_to — последний день периода (datetime)
+    if days == 30:
+        period = '1 месяц'
+    elif days == 90:
+        period = '3 месяца'
+    elif days == 180:
+        period = '6 месяцев'
+    else:
+        period = f'{days} дней'
+    safe_surname = surname.replace(' ', '_').replace('.', '.')
+    date_str = date_to.strftime('%Y-%m-%d')
+    return f"{date_str} {surname} отчет УРВ {period}.html"
 
 def main():
     # Получаем версию приложения
