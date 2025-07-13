@@ -5,6 +5,6 @@ OrionEventsToTelegram - Мониторинг событий УРВ → Telegram 
 системы ОРИОН и отправки уведомлений в Telegram.
 """
 
-__version__ = "2.1.0"
+__version__ = "2.1.1"
 __author__ = "OrionEventsToTelegram Team"
 __description__ = "Мониторинг событий УРВ → Telegram Bot" 
