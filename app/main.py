@@ -12,6 +12,7 @@ import os
 from config import get_telegram_token, get_authorized_users_file, get_user_filters_file, get_logging_level, get_admin_ids, get_database_path, get_logging_backup_logs_count
 import time
 import requests
+import urllib3
 from user_manager import UserManager
 from database import init_database
 
@@ -288,16 +289,23 @@ def start_smtp_server(bot=None, user_manager=None):
     
     handler = SMTPHandler(bot, user_manager)
     controller = Controller(handler, hostname='127.0.0.1', port=1025)
-    controller.start()
-    log_info("✅ SMTP сервер запущен на localhost:1025", module='SMTP')
-    # Держим поток активным
+    
     try:
+        controller.start()
+        log_info("✅ SMTP сервер запущен на localhost:1025", module='SMTP')
+        # Держим поток активным
         while True:
             time.sleep(1)  # Небольшая пауза для снижения нагрузки на CPU
     except KeyboardInterrupt:
         log_warning("Получен сигнал прерывания, остановка SMTP сервера...", module='SMTP')
-        controller.stop()
-        log_info("SMTP сервер остановлен", module='SMTP')
+    except Exception as e:
+        log_error(f"Ошибка в SMTP сервере: {e}", module='SMTP')
+    finally:
+        try:
+            controller.stop()
+            log_info("SMTP сервер остановлен", module='SMTP')
+        except Exception as e:
+            log_error(f"Ошибка при остановке SMTP сервера: {e}", module='SMTP')
 
 def start_telegram_bot(bot, user_manager):
     log_info("🤖 Запуск Telegram бота...", module='Telegram')
@@ -516,6 +524,20 @@ def start_telegram_bot(bot, user_manager):
             log_warning(f"ReadTimeout: {e}. Повтор через {delay} сек.", module='Telegram')
             time.sleep(delay)
             delay = min(delay * 2, 300)  # увеличиваем задержку до 5 минут максимум
+        except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError) as e:
+            if stop_bot:
+                break
+            log_warning(f"Проблема с подключением к Telegram API: {e}", module='Telegram')
+            log_info("Проверьте интернет-соединение и доступность api.telegram.org", module='Telegram')
+            time.sleep(delay)
+            delay = min(delay * 2, 300)
+        except (urllib3.exceptions.ConnectTimeoutError, urllib3.exceptions.NameResolutionError) as e:
+            if stop_bot:
+                break
+            log_warning(f"Ошибка DNS/соединения: {e}", module='Telegram')
+            log_info("Проверьте интернет-соединение и DNS", module='Telegram')
+            time.sleep(delay)
+            delay = min(delay * 2, 300)
         except KeyboardInterrupt:
             log_warning("Получен сигнал прерывания в Telegram боте", module='Telegram')
             break
@@ -523,8 +545,9 @@ def start_telegram_bot(bot, user_manager):
             if stop_bot:
                 break
             import traceback
-            log_error(f"Ошибка в Telegram боте: {e}", module='Telegram')
-            traceback.print_exc()
+            log_error(f"Неожиданная ошибка в Telegram боте: {e}", module='Telegram')
+            if LOGGING_LEVEL == 'DEBUG':
+                traceback.print_exc()
             time.sleep(delay)
             delay = min(delay * 2, 300)
         else:
@@ -583,10 +606,17 @@ def check_telegram_bot(bot):
         # Пробуем получить информацию о боте
         bot_info = bot.get_me()
         log_info(f"✅ Подключение к Telegram API: @{bot_info.username}", module='Telegram')
+        return True
+    except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError, 
+            urllib3.exceptions.ConnectTimeoutError, urllib3.exceptions.NameResolutionError) as e:
+        log_warning(f"⚠️  Проблема с подключением к Telegram API: {e}", module='Telegram')
+        log_info("   Приложение запустится, но Telegram бот может не работать", module='Telegram')
+        log_info("   Проверьте интернет-соединение и доступность api.telegram.org", module='Telegram')
+        return False
     except Exception as e:
-        log_error(f"❌ Ошибка подключения к Telegram API: {e}", module='Telegram')
+        log_error(f"❌ Критическая ошибка подключения к Telegram API: {e}", module='Telegram')
         log_error("   Проверьте токен бота и интернет-соединение", module='Telegram')
-        os._exit(1)
+        return False
 
 def main():
     # Получаем версию приложения
@@ -608,6 +638,14 @@ def main():
     check_configuration()
     check_smtp_server()
     
+    # Создаем бота
+    bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+    
+    # Проверяем подключение к Telegram API
+    telegram_available = check_telegram_bot(bot)
+    if not telegram_available:
+        log_warning("Telegram бот будет работать в режиме восстановления", module='CORE')
+    
     # Устанавливаем обработчик сигналов
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -620,9 +658,6 @@ def main():
     global user_manager
     user_manager = UserManager(db)
     log_info("✅ Менеджер пользователей инициализирован", module='CORE')
-    
-    # Создаем бота
-    bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
     
     # Запускаем SMTP сервер с передачей бота и user_manager
     smtp_thread = threading.Thread(target=start_smtp_server, args=(bot, user_manager))
