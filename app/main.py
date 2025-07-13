@@ -65,109 +65,17 @@ except RuntimeError:
 # Получаем уровень логирования из конфигурации
 LOGGING_LEVEL = get_logging_level()
 
-# Преобразуем строку в уровень логирования
-level_map = {
-    'DEBUG': logging.DEBUG,
-    'INFO': logging.INFO,
-    'WARNING': logging.WARNING,
-    'ERROR': logging.ERROR
-}
+# Инициализируем наш логгер
+from logger import setup_logger
+logger_instance = setup_logger(LOGGING_LEVEL)
 
-# Настройка логирования
-logging.basicConfig(
-    level=level_map.get(LOGGING_LEVEL, logging.WARNING),
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler()
-    ]
-)
+# Настройка логгеров сторонних библиотек уже выполняется в logger.py
 
-# Принудительно отключаем все логи от сторонних библиотек в не-DEBUG режимах
-if LOGGING_LEVEL != 'DEBUG':
-    # Отключаем все логгеры, которые могут создавать шум
-    for logger_name in ['aiosmtpd', 'asyncio', 'urllib3', 'requests', 'telebot', 
-                       'aiosmtpd.smtp', 'aiosmtpd.controller', 'aiosmtpd.handlers',
-                       'aiohttp', 'aiohttp.client', 'aiohttp.server']:
-        logger = logging.getLogger(logger_name)
-        logger.setLevel(logging.ERROR)
-        logger.propagate = False
-        # Удаляем все обработчики
-        for handler in logger.handlers[:]:
-            logger.removeHandler(handler)
+# Форматтеры и фильтры уже настроены в logger.py
 
-# Отключаем логи от сторонних библиотек (кроме DEBUG уровня)
-if LOGGING_LEVEL != 'DEBUG':
-    logging.getLogger('aiosmtpd').setLevel(logging.ERROR)
-    logging.getLogger('asyncio').setLevel(logging.ERROR)
-    logging.getLogger('urllib3').setLevel(logging.ERROR)
-    logging.getLogger('requests').setLevel(logging.ERROR)
-    logging.getLogger('telebot').setLevel(logging.ERROR)
-    # Дополнительно отключаем все логи от aiosmtpd
-    logging.getLogger('aiosmtpd.smtp').setLevel(logging.ERROR)
-    logging.getLogger('aiosmtpd.controller').setLevel(logging.ERROR)
-    logging.getLogger('aiosmtpd.handlers').setLevel(logging.ERROR)
-else:
-    # В DEBUG режиме показываем технические логи
-    logging.getLogger('aiosmtpd').setLevel(logging.DEBUG)
-    logging.getLogger('asyncio').setLevel(logging.DEBUG)
-    logging.getLogger('urllib3').setLevel(logging.DEBUG)
-    logging.getLogger('requests').setLevel(logging.DEBUG)
-    logging.getLogger('telebot').setLevel(logging.DEBUG)
-
-# Создаем кастомный форматтер для цветного вывода
-class ColoredFormatter(logging.Formatter):
-    def format(self, record):
-        # Добавляем цвета в зависимости от уровня
-        if record.levelno == logging.ERROR:
-            color = Fore.RED
-        elif record.levelno == logging.WARNING:
-            color = Fore.YELLOW
-        elif record.levelno == logging.INFO:
-            color = Fore.GREEN
-        elif record.levelno == logging.DEBUG:
-            color = Fore.CYAN
-        else:
-            color = Fore.WHITE
-        
-        # Форматируем сообщение с цветом
-        record.msg = f"{color}{record.msg}{Style.RESET_ALL}"
-        return super().format(record)
-
-# Создаем фильтр для отключения технических логов в не-DEBUG режимах
-class TechnicalLogFilter(logging.Filter):
-    def __init__(self, debug_mode=False):
-        super().__init__()
-        self.debug_mode = debug_mode
-    
-    def filter(self, record):
-        if self.debug_mode:
-            return True
-        
-        # Отфильтровываем технические сообщения
-        technical_keywords = [
-            'Available AUTH mechanisms',
-            'Peer:',
-            'handling connection',
-            'EOF received',
-            'Connection lost',
-            'connection lost',
-            '>> b\'',
-            'sender:',
-            'recip:'
-        ]
-        
-        for keyword in technical_keywords:
-            if keyword in record.getMessage():
-                return False
-        
-        return True
-
-# Применяем цветной форматтер и фильтр
-for handler in logging.root.handlers:
-    handler.setFormatter(ColoredFormatter('%(asctime)s - %(levelname)s - %(message)s'))
-    handler.addFilter(TechnicalLogFilter(debug_mode=(LOGGING_LEVEL == 'DEBUG')))
-
-logger = logging.getLogger(__name__)
+# Используем наш логгер
+from logger import get_logger
+logger = get_logger(__name__)
 
 # Удаляю глобальное создание bot
 # bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
@@ -243,46 +151,19 @@ MODULE_COLORS = {
     'DEBUG': Fore.CYAN
 }
 
+# Используем функции логирования из нашего модуля
+from logger import log_info, log_warning, log_error, log_debug, log_telegram, log_smtp
+
 def log_message(level, message, module='CORE'):
-    color = MODULE_COLORS.get(module, Fore.WHITE)
-    level_color = MODULE_COLORS.get(level, Fore.WHITE)
-    now = datetime.now().strftime('%H:%M:%S')
-    # Формируем строку с подсветкой модуля
-    mod_str = f"[{module.upper()}]"
+    """Логирование сообщений с указанием уровня"""
     if level == 'INFO':
-        print(f"{color}[INFO] {now} - {mod_str} {message}{Style.RESET_ALL}")
+        log_info(message, module)
     elif level == 'WARNING':
-        print(f"{level_color}[WARN] {now} - {mod_str} {message}{Style.RESET_ALL}")
+        log_warning(message, module)
     elif level == 'ERROR':
-        print(f"{level_color}[ERROR] {now} - {mod_str} {message}{Style.RESET_ALL}")
+        log_error(message, module)
     elif level == 'DEBUG':
-        print(f"{level_color}[DEBUG] {now} - {mod_str} {message}{Style.RESET_ALL}")
-
-# Обёртки для разных уровней логирования
-
-def log_info(message, module='CORE'):
-    if LOGGING_LEVEL in ['DEBUG', 'INFO']:
-        log_message('INFO', message, module)
-
-def log_warning(message, module='CORE'):
-    if LOGGING_LEVEL in ['DEBUG', 'INFO', 'WARNING']:
-        log_message('WARNING', message, module)
-
-def log_error(message, module='CORE'):
-    if LOGGING_LEVEL in ['DEBUG', 'INFO', 'WARNING', 'ERROR']:
-        log_message('ERROR', message, module)
-
-def log_debug(message, module='CORE'):
-    if LOGGING_LEVEL == 'DEBUG':
-        log_message('DEBUG', message, module)
-
-# Для совместимости с остальным кодом
-
-def log_telegram(message):
-    log_info(message, module='Telegram')
-
-def log_smtp(message):
-    log_info(message, module='SMTP')
+        log_debug(message, module)
 
 def process_string(s):
     # Извлекаем время (часы и минуты)

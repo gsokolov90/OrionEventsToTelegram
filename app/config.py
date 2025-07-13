@@ -133,4 +133,26 @@ def get_logging_level():
         print(f"⚠️  Неверный уровень логирования '{level}'. Используется WARNING.")
         return 'WARNING'
     
-    return level 
+    return level
+
+
+
+
+
+def get_logging_backup_count():
+    """Получение количества файлов для ротации"""
+    config = get_config()
+    
+    if 'Logging' not in config:
+        # По умолчанию 5 файлов
+        return 5
+    
+    try:
+        backup_count = config.getint('Logging', 'backup_count', fallback=5)
+        if backup_count < 0:
+            print(f"⚠️  Неверное количество файлов '{backup_count}'. Используется 5.")
+            return 5
+        return backup_count
+    except ValueError:
+        print(f"⚠️  Неверный формат количества файлов. Используется 5.")
+        return 5 

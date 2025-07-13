@@ -140,6 +140,8 @@ db/*.db
 # Logs
 *.log
 logs/
+log/*
+!log/.gitkeep
 
 # IDE
 .vscode/
