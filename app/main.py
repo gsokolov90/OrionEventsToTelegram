@@ -229,6 +229,7 @@ class SMTPHandler(Message):
     
     def handle_message(self, message):
         log_smtp("📧 Получено новое email сообщение")
+        log_debug("DEBUG: Начало обработки SMTP сообщения", module='SMTP')
         
         # Декодируем тело сообщения
         if message.is_multipart():
@@ -254,10 +255,11 @@ class SMTPHandler(Message):
         employee_name = employee_match.group(1).strip() if employee_match else "Неизвестный сотрудник"
         
         log_smtp(f"👤 Обработка события: {employee_name}")
-        log_debug(f"📧 Полное содержимое email: {body}")
+        log_debug(f"📧 Полное содержимое email: {body}", module='SMTP')
         
         # Отправляем только тело сообщения в Telegram
         msg_text = body
+        log_debug("DEBUG: Подготовка к отправке в Telegram", module='SMTP')
 
         if self.user_manager:
             authorized_users = self.user_manager.get_authorized_users()
@@ -284,6 +286,7 @@ class SMTPHandler(Message):
 
 def start_smtp_server(bot=None, user_manager=None):
     log_info("🚀 Запуск SMTP сервера...", module='SMTP')
+    log_debug("DEBUG: Инициализация SMTP сервера", module='SMTP')
     
     # Отключаем логи aiosmtpd если не в DEBUG режиме
     if LOGGING_LEVEL != 'DEBUG':
@@ -292,6 +295,8 @@ def start_smtp_server(bot=None, user_manager=None):
         logging.getLogger('aiosmtpd.smtp').setLevel(logging.ERROR)
         logging.getLogger('aiosmtpd.controller').setLevel(logging.ERROR)
         logging.getLogger('aiosmtpd.handlers').setLevel(logging.ERROR)
+    else:
+        log_debug("DEBUG: aiosmtpd логи включены", module='SMTP')
     
     handler = SMTPHandler(bot, user_manager)
     controller = Controller(handler, hostname='127.0.0.1', port=1025)
