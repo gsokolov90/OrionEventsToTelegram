@@ -98,6 +98,10 @@ class TechnicalLogFilter(logging.Filter):
         """Фильтрует технические сообщения"""
         message = record.getMessage()
         
+        # В не-DEBUG режимах блокируем все DEBUG сообщения
+        if not self.debug_mode and record.levelno == logging.DEBUG:
+            return False
+        
         if self.debug_mode:
             # В DEBUG режиме пропускаем все сообщения с ключевыми словами DEBUG
             if any(keyword in message for keyword in self.DEBUG_KEYWORDS):
@@ -182,6 +186,7 @@ class Logger:
             )
             
             file_handler.setFormatter(FileFormatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
+            file_handler.addFilter(TechnicalLogFilter(debug_mode=(self.level == 'DEBUG')))
             logging.getLogger().addHandler(file_handler)
         except Exception as e:
             print(f"[ERROR] Ошибка при настройке файлового логгера: {e}")
