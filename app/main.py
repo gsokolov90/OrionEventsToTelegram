@@ -13,6 +13,16 @@ from config import get_telegram_token, get_authorized_users_file, get_user_filte
 import time
 import requests
 
+def get_version():
+    """Читает версию из файла VERSION"""
+    try:
+        with open('VERSION', 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return "unknown"
+    except Exception:
+        return "unknown"
+
 # Настройка кодировки для Windows
 if os.name == 'nt':  # Windows
     import locale
@@ -544,10 +554,13 @@ def check_telegram_bot():
         os._exit(1)
 
 def main():
+    # Получаем версию приложения
+    version = get_version()
+    
     # Логотип без боковых рамок
     logo_art = f"""
 {Fore.CYAN}╔════════════════════════════════════════════════════════════════╗
-   OrionEventsToTelegram
+   OrionEventsToTelegram v{version}
   🚀 Мониторинг событий УРВ → Telegram Bot
   📧 SMTP: localhost:1025
   📊 Логирование: {LOGGING_LEVEL}
