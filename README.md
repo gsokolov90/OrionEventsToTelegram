@@ -2,7 +2,7 @@
 
 Сервис для пересылки событий из почты в Telegram с поддержкой фильтрации по сотрудникам.
 
-**Версия:** 2.0.1
+**Версия:** 2.0.2
 
 ## Быстрый старт
 
@@ -22,7 +22,11 @@
    pip install -r requirements.txt
    cd ..
    ```
-3. Создайте `config.ini` в корне проекта:
+3. Скопируйте `config.example.ini` в `config.ini` и настройте:
+   ```bash
+   cp config.example.ini config.ini
+   ```
+   Затем отредактируйте `config.ini`:
    ```ini
    [Telegram]
    bot_token = ваш_токен_бота_здесь
@@ -53,7 +57,7 @@ OrionEventsToTelegram/
 ├── db/                    # Папка с данными
 │   ├── authorized_users.txt
 │   └── user_filters.txt
-├── config.ini             # Конфигурационный файл
+├── config.example.ini     # Пример конфигурации
 ├── VERSION                # Файл версии
 ├── CHANGELOG.md           # История изменений
 └── run.bat                # Скрипт запуска и установки
