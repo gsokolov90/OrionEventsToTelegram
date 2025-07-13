@@ -133,6 +133,7 @@ dmypy.json
 .env
 .env.local
 .env.production
+config.ini
 
 # User data
 db/authorized_users.txt
