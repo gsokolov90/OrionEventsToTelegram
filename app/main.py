@@ -366,12 +366,92 @@ def start_smtp_server(bot=None, user_manager=None, events_db=None):
         except Exception as e:
             log_error(f"Ошибка при остановке SMTP сервера: {e}", module='SMTP')
 
+def clear_bot_menu(bot):
+    """Очищает бургер меню бота"""
+    try:
+        # Принудительно удаляем все команды
+        bot.delete_my_commands()
+        # Также очищаем команды для всех языков
+        bot.delete_my_commands(scope=None, language_code=None)
+        log_info("🧹 Бургер меню очищено", module='Telegram')
+    except Exception as e:
+        log_error(f"❌ Ошибка очистки бургер меню: {e}", module='Telegram')
+
+def set_authorized_menu(bot):
+    """Устанавливает бургер меню для авторизованных пользователей"""
+    try:
+        from telebot.types import BotCommand
+        
+        commands = [
+            BotCommand("report", "📊 Сформировать отчет по сотруднику"),
+            BotCommand("filter", "🔍 Установить фильтр по фамилии"),
+            BotCommand("unfilter", "❌ Отключить фильтр"),
+            BotCommand("start", "🔄 Перезапуск бота")
+        ]
+        
+        # Сначала очищаем все команды
+        bot.delete_my_commands()
+        bot.delete_my_commands(scope=None, language_code=None)
+        
+        # Затем устанавливаем новые команды
+        bot.set_my_commands(commands, scope=None, language_code=None)
+        
+        # Принудительно обновляем для всех языков
+        for lang_code in ['ru', 'en']:
+            try:
+                bot.set_my_commands(commands, scope=None, language_code=lang_code)
+            except Exception:
+                pass  # Игнорируем ошибки для конкретных языков
+        
+        log_info("✅ Бургер меню для авторизованных пользователей установлено", module='Telegram')
+    except Exception as e:
+        log_error(f"❌ Ошибка установки бургер меню: {e}", module='Telegram')
+
 def start_telegram_bot(bot, user_manager):
     log_info("🤖 Запуск Telegram бота...", module='Telegram')
     
     # Проверка подключения к Telegram API
     check_telegram_bot(bot)
     
+    # Очищаем бургер меню при старте
+    clear_bot_menu(bot)
+    
+    # Проверяем, что команды действительно очищены
+    try:
+        current_commands = bot.get_my_commands()
+        if current_commands:
+            log_warning(f"⚠️  Обнаружены старые команды: {[cmd.command for cmd in current_commands]}", module='Telegram')
+        else:
+            log_info("✅ Команды успешно очищены", module='Telegram')
+    except Exception as e:
+        log_error(f"❌ Ошибка проверки команд: {e}", module='Telegram')
+    
+    @bot.message_handler(commands=['start'])
+    def handle_start(message):
+        user_id = message.from_user.id
+        log_telegram(f"Команда /start от пользователя {user_id}")
+        
+        if user_manager.is_authorized(user_id):
+            # Для авторизованных пользователей - перезапуск бота
+            bot.reply_to(message, "🔄 Бот перезапущен! Используйте команды из меню для работы.")
+            # Устанавливаем меню для авторизованного пользователя
+            set_authorized_menu(bot)
+            
+            # Проверяем установку команд
+            try:
+                current_commands = bot.get_my_commands()
+                log_info(f"📋 Установленные команды: {[cmd.command for cmd in current_commands]}", module='Telegram')
+            except Exception as e:
+                log_error(f"❌ Ошибка проверки установленных команд: {e}", module='Telegram')
+        else:
+            # Для неавторизованных пользователей - приветствие
+            welcome_text = (
+                "👋 Добро пожаловать в систему мониторинга УРВ!\n\n"
+                "Для получения уведомлений о событиях УРВ необходимо авторизоваться.\n"
+                "Используйте команду /auth для запроса авторизации."
+            )
+            bot.reply_to(message, welcome_text)
+
     @bot.message_handler(commands=['auth'])
     def handle_auth(message):
         user_id = message.from_user.id
@@ -471,6 +551,15 @@ def start_telegram_bot(bot, user_manager):
                 
             if user_manager.add_authorized_user(target_user_id, added_by=user_id):
                 bot.reply_to(message, f"Пользователь {target_user_id} успешно добавлен.")
+                # Устанавливаем бургер меню для авторизованного пользователя
+                set_authorized_menu(bot)
+                
+                # Проверяем установку команд
+                try:
+                    current_commands = bot.get_my_commands()
+                    log_info(f"📋 Установленные команды после добавления пользователя: {[cmd.command for cmd in current_commands]}", module='Telegram')
+                except Exception as e:
+                    log_error(f"❌ Ошибка проверки установленных команд: {e}", module='Telegram')
             else:
                 bot.reply_to(message, f"Пользователь {target_user_id} уже авторизован или произошла ошибка.")
                 
@@ -479,6 +568,30 @@ def start_telegram_bot(bot, user_manager):
         except Exception as e:
             log_error(f"Ошибка добавления пользователя: {e}", module='Telegram')
             bot.reply_to(message, "Произошла ошибка при добавлении пользователя.")
+
+    @bot.message_handler(commands=['update_menu'])
+    def handle_update_menu(message):
+        user_id = message.from_user.id
+        
+        # Проверяем права администратора
+        if not is_admin(user_id):
+            bot.reply_to(message, "У вас нет прав для выполнения этой команды.")
+            return
+        
+        try:
+            # Принудительно обновляем меню
+            clear_bot_menu(bot)
+            set_authorized_menu(bot)
+            
+            # Проверяем результат
+            current_commands = bot.get_my_commands()
+            command_list = [cmd.command for cmd in current_commands]
+            
+            bot.reply_to(message, f"✅ Меню обновлено!\n\nУстановленные команды: {', '.join(command_list)}")
+            log_info(f"Меню принудительно обновлено администратором {user_id}", module='Telegram')
+        except Exception as e:
+            bot.reply_to(message, f"❌ Ошибка обновления меню: {e}")
+            log_error(f"Ошибка принудительного обновления меню: {e}", module='Telegram')
 
     @bot.message_handler(commands=['list_users'])
     def handle_list_users(message):
@@ -539,6 +652,15 @@ def start_telegram_bot(bot, user_manager):
             notification_text = f"✅ Ваша заявка на авторизацию {status_text}!"
             if approved:
                 notification_text += "\n\nТеперь вы можете получать уведомления о событиях УРВ."
+                # Устанавливаем бургер меню для авторизованного пользователя
+                set_authorized_menu(bot)
+                
+                # Проверяем установку команд
+                try:
+                    current_commands = bot.get_my_commands()
+                    log_info(f"📋 Установленные команды после авторизации: {[cmd.command for cmd in current_commands]}", module='Telegram')
+                except Exception as e:
+                    log_error(f"❌ Ошибка проверки установленных команд: {e}", module='Telegram')
             bot.send_message(target_user_id, notification_text)
             
             # Обновляем сообщение администратора
