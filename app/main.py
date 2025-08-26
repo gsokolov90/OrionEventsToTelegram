@@ -68,7 +68,23 @@ DATABASE_PATH = get_users_database_path()
 LOGGING_LEVEL = get_logging_level()
 
 # Импортируем функции логирования (инициализация будет в main)
-from logger import log_info, log_warning, log_error, log_debug, log_telegram, log_smtp
+# На Windows эти функции будут переопределены простыми версиями
+if os.name != 'nt':  # Не Windows
+    from logger import log_info, log_warning, log_error, log_debug, log_telegram, log_smtp
+else:
+    # Заглушки для Windows - будут переопределены в main()
+    def log_info(message, module='CORE'):
+        pass
+    def log_warning(message, module='CORE'):
+        pass
+    def log_error(message, module='CORE'):
+        pass
+    def log_debug(message, module='CORE'):
+        pass
+    def log_telegram(message):
+        pass
+    def log_smtp(message):
+        pass
 
 # Удаляю глобальное создание bot
 # bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
@@ -1143,6 +1159,11 @@ def main():
             log_warning = simple_log_warning
             log_error = simple_log_error
             log_debug = simple_log_debug
+            
+            # Также заменяем функции для других модулей
+            global log_telegram, log_smtp
+            log_telegram = lambda msg: simple_log_info(msg, 'Telegram')
+            log_smtp = lambda msg: simple_log_info(msg, 'SMTP')
             
             print("[DEBUG] Step 4: Windows logging functions created")
         else:
