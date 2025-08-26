@@ -10,37 +10,47 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import threading
 import time
-try:
-    from logger import get_logger
-    logger = get_logger('EventsDatabase')
-    def log_info(message, module='EventsDatabase'):
-        logger.info(message)
-    def log_error(message, module='EventsDatabase'):
-        logger.error(message)
-    def log_debug(message, module='EventsDatabase'):
-        logger.debug(message)
-    def log_warning(message, module='EventsDatabase'):
-        logger.warning(message)
-except ImportError:
-    # Fallback для прямого запуска файла
-    from .logger import get_logger
-    logger = get_logger('EventsDatabase')
-    def log_info(message, module='EventsDatabase'):
-        logger.info(message)
-    def log_error(message, module='EventsDatabase'):
-        logger.error(message)
-    def log_debug(message, module='EventsDatabase'):
-        logger.debug(message)
-    def log_warning(message, module='EventsDatabase'):
-        logger.warning(message)
+# Простые функции логирования для Windows
+def log_info(message, module='EventsDatabase'):
+    print(f"[INFO] {module}: {message}")
+
+def log_error(message, module='EventsDatabase'):
+    print(f"[ERROR] {module}: {message}")
+
+def log_debug(message, module='EventsDatabase'):
+    print(f"[DEBUG] {module}: {message}")
+
+def log_warning(message, module='EventsDatabase'):
+    print(f"[WARNING] {module}: {message}")
+
+# Пытаемся получить логгер только для Unix систем
+logger = None
+if os.name != 'nt':  # Не Windows
+    try:
+        from logger import get_logger
+        logger = get_logger('EventsDatabase')
+        # Переопределяем функции если логгер доступен
+        def log_info(message, module='EventsDatabase'):
+            logger.info(message)
+        def log_error(message, module='EventsDatabase'):
+            logger.error(message)
+        def log_debug(message, module='EventsDatabase'):
+            logger.debug(message)
+        def log_warning(message, module='EventsDatabase'):
+            logger.warning(message)
+    except ImportError:
+        pass  # Используем простые функции
 
 
 class EventsDatabaseManager:
     """Менеджер базы данных событий с автоматическим созданием схемы"""
     
     def __init__(self, db_path: str):
+        print(f"[DEBUG] EventsDatabase: EventsDatabaseManager.__init__ called with path: {db_path}")
         self.db_path = db_path
+        print("[DEBUG] EventsDatabase: Calling _ensure_database_exists...")
         self._ensure_database_exists()
+        print("[DEBUG] EventsDatabase: _ensure_database_exists completed")
     
     def _ensure_database_exists(self) -> None:
         """Создает базу данных и таблицы если их нет"""
@@ -406,4 +416,14 @@ class EventsCleanupScheduler:
 
 def init_events_database(db_path: str) -> EventsDatabaseManager:
     """Инициализация базы данных событий"""
-    return EventsDatabaseManager(db_path) 
+    print(f"[DEBUG] EventsDatabase: init_events_database called with path: {db_path}")
+    try:
+        print("[DEBUG] EventsDatabase: Creating EventsDatabaseManager...")
+        events_db_manager = EventsDatabaseManager(db_path)
+        print("[DEBUG] EventsDatabase: EventsDatabaseManager created successfully")
+        return events_db_manager
+    except Exception as e:
+        print(f"[DEBUG] EventsDatabase: Error creating EventsDatabaseManager: {e}")
+        import traceback
+        traceback.print_exc()
+        raise 
