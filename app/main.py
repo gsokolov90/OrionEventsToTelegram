@@ -1110,14 +1110,60 @@ def main():
     try:
         print("[DEBUG] Step 1: Starting main function...")
         
-        # Инициализируем логгер в начале main функции
-        print("[DEBUG] Step 2: Importing logger...")
-        from logger import setup_logger
-        print("[DEBUG] Step 3: Logger imported successfully")
-        
-        print("[DEBUG] Step 4: Setting up logger...")
-        logger_instance = setup_logger(LOGGING_LEVEL)
-        print("[DEBUG] Step 5: Logger setup completed")
+        # Для Windows используем простой логгер без сложных форматтеров
+        if os.name == 'nt':  # Windows
+            print("[DEBUG] Step 2: Windows detected, using simple logger...")
+            import logging
+            # Создаем директорию для логов если её нет
+            import os
+            log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'log')
+            os.makedirs(log_dir, exist_ok=True)
+            
+            # Создаем простой логгер для Windows
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format='%(asctime)s - %(levelname)s - %(message)s',
+                handlers=[
+                    logging.StreamHandler(),
+                    logging.FileHandler(os.path.join(log_dir, 'windows_app.log'), encoding='utf-8')
+                ]
+            )
+            print("[DEBUG] Step 3: Simple Windows logger created")
+            
+            # Создаем простые функции логирования для Windows
+            def simple_log_info(message, module='CORE'):
+                print(f"[INFO] {module}: {message}")
+                logging.info(f"{module}: {message}")
+            
+            def simple_log_warning(message, module='CORE'):
+                print(f"[WARNING] {module}: {message}")
+                logging.warning(f"{module}: {message}")
+            
+            def simple_log_error(message, module='CORE'):
+                print(f"[ERROR] {module}: {message}")
+                logging.error(f"{module}: {message}")
+            
+            def simple_log_debug(message, module='CORE'):
+                print(f"[DEBUG] {module}: {message}")
+                logging.debug(f"{module}: {message}")
+            
+            # Заменяем функции логирования
+            global log_info, log_warning, log_error, log_debug
+            log_info = simple_log_info
+            log_warning = simple_log_warning
+            log_error = simple_log_error
+            log_debug = simple_log_debug
+            
+            print("[DEBUG] Step 4: Windows logging functions created")
+        else:
+            # Для Unix систем используем обычный логгер
+            print("[DEBUG] Step 2: Unix detected, using normal logger...")
+            from logger import setup_logger
+            print("[DEBUG] Step 3: Logger imported successfully")
+            
+            print("[DEBUG] Step 4: Setting up logger...")
+            logger_instance = setup_logger(LOGGING_LEVEL)
+            print("[DEBUG] Step 5: Logger setup completed")
         
         # Получаем версию приложения
         print("[DEBUG] Step 6: Getting version...")
