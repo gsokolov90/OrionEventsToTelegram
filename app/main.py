@@ -76,17 +76,8 @@ except RuntimeError:
 # Получаем уровень логирования из конфигурации
 LOGGING_LEVEL = get_logging_level()
 
-# Инициализируем наш логгер
-from app.logger import setup_logger
-logger_instance = setup_logger(LOGGING_LEVEL)
-
-# Настройка логгеров сторонних библиотек уже выполняется в logger.py
-
-# Форматтеры и фильтры уже настроены в logger.py
-
-# Используем наш логгер
-from app.logger import get_logger
-logger = get_logger(__name__)
+# Импортируем функции логирования (инициализация будет в main)
+from app.logger import log_info, log_warning, log_error, log_debug, log_telegram, log_smtp
 
 # Удаляю глобальное создание bot
 # bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
@@ -171,9 +162,6 @@ MODULE_COLORS = {
     'ERROR': Fore.RED,
     'DEBUG': Fore.CYAN
 }
-
-# Используем функции логирования из нашего модуля
-from app.logger import log_info, log_warning, log_error, log_debug, log_telegram, log_smtp
 
 def log_message(level, message, module='CORE'):
     """Логирование сообщений с указанием уровня"""
@@ -1119,6 +1107,10 @@ def get_report_filename(surname, days, date_to):
     return f"{date_str} {surname} отчет УРВ {period}.html"
 
 def main():
+    # Инициализируем логгер в начале main функции
+    from app.logger import setup_logger
+    logger_instance = setup_logger(LOGGING_LEVEL)
+    
     # Получаем версию приложения
     version = get_version()
     
