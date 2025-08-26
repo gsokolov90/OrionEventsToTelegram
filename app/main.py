@@ -26,9 +26,12 @@ from app.config import get_telegram_token, get_authorized_users_file, get_user_f
 def get_version():
     """Читает версию из файла VERSION"""
     try:
-        with open('VERSION', 'r', encoding='utf-8') as f:
-            return f.read().strip()
-    except FileNotFoundError:
+        # Пытаемся найти файл VERSION в текущей или родительской директории
+        version_paths = ['VERSION', '../VERSION', '../../VERSION']
+        for path in version_paths:
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    return f.read().strip()
         return "unknown"
     except Exception:
         return "unknown"
@@ -49,7 +52,7 @@ if os.name == 'nt':  # Windows
     # Устанавливаем кодировку консоли Windows
     os.system('chcp 65001 > nul 2>&1')
     # Устанавливаем заголовок окна консоли
-    os.system('OrionEventsToTelegram - Мониторинг УРВ')
+    os.system('title OrionEventsToTelegram - Мониторинг УРВ')
 
 # Инициализация colorama для Windows
 init()
