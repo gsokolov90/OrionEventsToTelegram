@@ -1195,26 +1195,37 @@ def main():
         signal.signal(signal.SIGTERM, signal_handler)
         
         # Инициализация базы данных
+        print("[DEBUG] Step 13: Starting database initialization...")
         log_info("🗄️  Инициализация базы данных...", module='CORE')
+        print("[DEBUG] Step 14: Calling init_database...")
         db = init_database(DATABASE_PATH)
+        print("[DEBUG] Step 15: Database initialized successfully")
         
         # Создаем менеджер пользователей после инициализации БД
+        print("[DEBUG] Step 16: Creating UserManager...")
         global user_manager
         user_manager = UserManager(db)
+        print("[DEBUG] Step 17: UserManager created successfully")
         log_info("✅ Менеджер пользователей инициализирован", module='CORE')
 
         # Инициализация базы данных событий
+        print("[DEBUG] Step 18: Getting events database configuration...")
         events_db_path = get_events_database_path()
         events_retention_days = get_events_retention_days()
         cleanup_enabled = get_cleanup_enabled()
         cleanup_time = get_cleanup_time()
+        print(f"[DEBUG] Step 19: Events DB path = {events_db_path}")
 
+        print("[DEBUG] Step 20: Initializing events database...")
         log_info(f"🗄️  Инициализация базы данных событий: {events_db_path}", module='CORE')
         events_db = init_events_database(events_db_path)
+        print("[DEBUG] Step 21: Events database initialized successfully")
         log_info("✅ База данных событий инициализирована", module='CORE')
         
         # Получаем статистику событий
+        print("[DEBUG] Step 22: Getting events statistics...")
         stats = events_db.get_statistics()
+        print("[DEBUG] Step 23: Statistics obtained successfully")
         log_info(f"📊 Статистика событий: {stats['total_events']} записей, {stats['unique_employees']} сотрудников", module='CORE')
 
         # Инициализация планировщика очистки событий
