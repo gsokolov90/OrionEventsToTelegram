@@ -187,39 +187,135 @@ class Logger:
             print(f"[DEBUG] _setup_logging: Error in setup: {e}")
             import traceback
             traceback.print_exc()
-            raise
+            
+            # Fallback для Windows: минимальный логгер
+            if os.name == 'nt':
+                print("[DEBUG] _setup_logging: Windows fallback mode - creating minimal logger")
+                try:
+                    # Простейшая настройка без сложных форматтеров
+                    logging.basicConfig(
+                        level=log_level,
+                        format='%(asctime)s - %(levelname)s - %(message)s',
+                        handlers=[
+                            logging.StreamHandler(),
+                            logging.FileHandler(log_dir / 'fallback.log', encoding='utf-8')
+                        ]
+                    )
+                    print("[DEBUG] _setup_logging: Windows fallback logger created successfully")
+                except Exception as e2:
+                    print(f"[DEBUG] _setup_logging: Windows fallback also failed: {e2}")
+                    raise
+            else:
+                raise
     
     def _setup_console_handler(self) -> None:
         """Настройка консольного обработчика"""
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(ColoredFormatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
-        console_handler.addFilter(TechnicalLogFilter(debug_mode=(self.level == 'DEBUG')))
-        logging.getLogger().addHandler(console_handler)
+        try:
+            print("[DEBUG] _setup_console_handler: Starting...")
+            console_handler = logging.StreamHandler()
+            print("[DEBUG] _setup_console_handler: StreamHandler created")
+            
+            # Для Windows используем простой форматтер без colorama
+            if os.name == 'nt':  # Windows
+                print("[DEBUG] _setup_console_handler: Using simple formatter for Windows")
+                simple_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+                console_handler.setFormatter(simple_formatter)
+            else:
+                print("[DEBUG] _setup_console_handler: Using colored formatter for Unix")
+                console_handler.setFormatter(ColoredFormatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
+            
+            print("[DEBUG] _setup_console_handler: Formatter set")
+            
+            # Упрощаем фильтр для Windows
+            if os.name == 'nt':
+                print("[DEBUG] _setup_console_handler: Skipping filter for Windows")
+            else:
+                console_handler.addFilter(TechnicalLogFilter(debug_mode=(self.level == 'DEBUG')))
+                print("[DEBUG] _setup_console_handler: Filter added")
+            
+            logging.getLogger().addHandler(console_handler)
+            print("[DEBUG] _setup_console_handler: Handler added to root logger")
+            print("[DEBUG] _setup_console_handler: Completed successfully")
+        except Exception as e:
+            print(f"[DEBUG] _setup_console_handler: Error: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fallback: простой обработчик без форматирования
+            try:
+                simple_handler = logging.StreamHandler()
+                simple_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+                simple_handler.setFormatter(simple_formatter)
+                logging.getLogger().addHandler(simple_handler)
+                print("[DEBUG] _setup_console_handler: Fallback handler created")
+            except Exception as e2:
+                print(f"[DEBUG] _setup_console_handler: Fallback also failed: {e2}")
+                raise
     
     def _setup_file_handler(self) -> None:
         """Настройка файлового обработчика с ротацией по дате"""
         try:
+            print("[DEBUG] _setup_file_handler: Starting...")
             log_dir = Path(__file__).parent.parent / 'log'
+            print(f"[DEBUG] _setup_file_handler: Log dir = {log_dir}")
             
             # Формируем имя файла только с датой
             dt_str = datetime.now().strftime('%Y%m%d')
             log_file = log_dir / f'{dt_str}_app.log'
+            print(f"[DEBUG] _setup_file_handler: Log file = {log_file}")
             
             # Очищаем старые лог файлы (оставляем только последние 7 дней по умолчанию)
+            print("[DEBUG] _setup_file_handler: Cleaning old logs...")
             self._cleanup_old_logs(log_dir, 7)
+            print("[DEBUG] _setup_file_handler: Old logs cleaned")
             
             # Используем обычный FileHandler вместо RotatingFileHandler
             # так как ротация теперь по дате, а не по размеру
+            print("[DEBUG] _setup_file_handler: Creating FileHandler...")
             file_handler = logging.FileHandler(
                 log_file,
                 encoding='utf-8'
             )
+            print("[DEBUG] _setup_file_handler: FileHandler created")
             
-            file_handler.setFormatter(FileFormatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
-            file_handler.addFilter(TechnicalLogFilter(debug_mode=(self.level == 'DEBUG')))
+            # Для Windows используем простой форматтер
+            if os.name == 'nt':
+                print("[DEBUG] _setup_file_handler: Using simple formatter for Windows")
+                simple_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+                file_handler.setFormatter(simple_formatter)
+            else:
+                print("[DEBUG] _setup_file_handler: Using FileFormatter")
+                file_handler.setFormatter(FileFormatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
+            
+            print("[DEBUG] _setup_file_handler: Formatter set")
+            
+            # Упрощаем фильтр для Windows
+            if os.name == 'nt':
+                print("[DEBUG] _setup_file_handler: Skipping filter for Windows")
+            else:
+                file_handler.addFilter(TechnicalLogFilter(debug_mode=(self.level == 'DEBUG')))
+                print("[DEBUG] _setup_file_handler: Filter added")
+            
             logging.getLogger().addHandler(file_handler)
+            print("[DEBUG] _setup_file_handler: Handler added to root logger")
+            print("[DEBUG] _setup_file_handler: Completed successfully")
         except Exception as e:
-            print(f"[ERROR] Ошибка при настройке файлового логгера: {e}")
+            print(f"[DEBUG] _setup_file_handler: Error: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fallback: простой файловый обработчик
+            try:
+                print("[DEBUG] _setup_file_handler: Creating fallback handler...")
+                fallback_handler = logging.FileHandler(
+                    log_file,
+                    encoding='utf-8'
+                )
+                simple_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+                fallback_handler.setFormatter(simple_formatter)
+                logging.getLogger().addHandler(fallback_handler)
+                print("[DEBUG] _setup_file_handler: Fallback handler created")
+            except Exception as e2:
+                print(f"[DEBUG] _setup_file_handler: Fallback also failed: {e2}")
+                raise
     
     def _cleanup_old_logs(self, log_dir: Path, keep_days: int) -> None:
         """Удаляет старые лог файлы, оставляя только последние keep_days дней"""
@@ -314,6 +410,17 @@ def log_info(message: str, module: str = 'CORE') -> None:
         traceback.print_exc()
         # Fallback to print
         print(f"[INFO] {module}: {message}")
+        # Дополнительный fallback: попробуем использовать базовый logging
+        try:
+            print("[DEBUG] log_info: Trying basic logging fallback...")
+            basic_logger = logging.getLogger(module)
+            basic_logger.setLevel(logging.INFO)
+            basic_logger.info(message)
+            print("[DEBUG] log_info: Basic logging fallback succeeded")
+        except Exception as e2:
+            print(f"[DEBUG] log_info: Basic logging fallback also failed: {e2}")
+            # Последний fallback: просто print
+            print(f"[INFO] {module}: {message}")
 
 
 def log_warning(message: str, module: str = 'CORE') -> None:
