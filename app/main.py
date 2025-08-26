@@ -13,7 +13,7 @@ from aiosmtpd.handlers import Message
 from email.message import EmailMessage
 import telebot
 import re
-from colorama import init, Fore, Back, Style
+from colorama import init, Fore, Style
 from datetime import datetime
 import time
 import requests
@@ -21,7 +21,7 @@ import urllib3
 from user_manager import UserManager
 from database import init_database
 from events_database import init_events_database, EventsCleanupScheduler
-from config import get_telegram_token, get_authorized_users_file, get_user_filters_file, get_logging_level, get_admin_ids, get_users_database_path, get_events_database_path, get_events_retention_days, get_cleanup_enabled, get_cleanup_time, get_logging_backup_logs_count
+from config import get_telegram_token, get_logging_level, get_admin_ids, get_users_database_path, get_events_database_path, get_events_retention_days, get_cleanup_enabled, get_cleanup_time, get_logging_backup_logs_count
 
 def get_version():
     """Читает версию из файла VERSION"""
@@ -57,21 +57,12 @@ if os.name == 'nt':  # Windows
 # Инициализация colorama для Windows
 init()
 
-# Инициализация colorama для Windows
-init()
-
 # Получаем токен из переменных окружения
 TELEGRAM_BOT_TOKEN = get_telegram_token()
 ADMIN_IDS = get_admin_ids()
 DATABASE_PATH = get_users_database_path()
 
-# Для обратной совместимости (если нужны старые пути)
-try:
-    AUTHORIZED_USERS_FILE = get_authorized_users_file()
-    USER_FILTERS_FILE = get_user_filters_file()
-except RuntimeError:
-    AUTHORIZED_USERS_FILE = "db/authorized_users.txt"
-    USER_FILTERS_FILE = "db/user_filters.txt"
+
 
 # Получаем уровень логирования из конфигурации
 LOGGING_LEVEL = get_logging_level()
@@ -1162,7 +1153,7 @@ def main():
             print("[DEBUG] Step 3: Logger imported successfully")
             
             print("[DEBUG] Step 4: Setting up logger...")
-            logger_instance = setup_logger(LOGGING_LEVEL)
+            setup_logger(LOGGING_LEVEL)
             print("[DEBUG] Step 5: Logger setup completed")
         
         # Получаем версию приложения

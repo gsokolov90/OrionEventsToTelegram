@@ -6,55 +6,73 @@ import logging
 import os
 from typing import Optional
 from pathlib import Path
-from logging.handlers import RotatingFileHandler
-from colorama import init, Fore, Style
 from datetime import datetime
 
-# Инициализация colorama
-init()
+# Инициализация colorama только для Unix систем
+if os.name != 'nt':  # Не Windows
+    from colorama import init, Fore, Style
+    init()
+else:
+    # Для Windows используем простые цвета
+    class Fore:
+        RED = ''
+        YELLOW = ''
+        GREEN = ''
+        CYAN = ''
+        BLUE = ''
+        MAGENTA = ''
+        WHITE = ''
+    
+    class Style:
+        RESET_ALL = ''
 
 
-class ColoredFormatter(logging.Formatter):
-    """Кастомный форматтер с цветным выводом"""
-    
-    COLORS = {
-        logging.ERROR: Fore.RED,
-        logging.WARNING: Fore.YELLOW,
-        logging.INFO: Fore.GREEN,
-        logging.DEBUG: Fore.CYAN,
-    }
-    
-    MODULE_COLORS = {
-        'CORE': Fore.GREEN,
-        'Telegram': Fore.MAGENTA,
-        'SMTP': Fore.BLUE,
-        'UserManager': Fore.CYAN,
-        'Database': Fore.BLUE,
-        'SystemInit': Fore.YELLOW,
-    }
-    
-    def format(self, record: logging.LogRecord) -> str:
-        """Форматирует сообщение с цветом"""
-        # Сначала форматируем базовое сообщение
-        formatted = super().format(record)
+# ColoredFormatter только для Unix систем
+if os.name != 'nt':  # Не Windows
+    class ColoredFormatter(logging.Formatter):
+        """Кастомный форматтер с цветным выводом"""
         
-        # Цвет для уровня логирования
-        level_color = self.COLORS.get(record.levelno, Fore.WHITE)
+        COLORS = {
+            logging.ERROR: Fore.RED,
+            logging.WARNING: Fore.YELLOW,
+            logging.INFO: Fore.GREEN,
+            logging.DEBUG: Fore.CYAN,
+        }
         
-        # Цвет для модуля
-        module_color = self.MODULE_COLORS.get(record.name, Fore.WHITE)
+        MODULE_COLORS = {
+            'CORE': Fore.GREEN,
+            'Telegram': Fore.MAGENTA,
+            'SMTP': Fore.BLUE,
+            'UserManager': Fore.CYAN,
+            'Database': Fore.BLUE,
+            'SystemInit': Fore.YELLOW,
+        }
         
-        # Применяем цвета к частям сообщения
-        parts = formatted.split(' - ')
-        if len(parts) >= 4:
-            time_part = parts[0]
-            level_part = parts[1]
-            name_part = f"{module_color}{parts[2]}{Style.RESET_ALL}"
-            msg_part = f"{level_color}{parts[3]}{Style.RESET_ALL}"
-            return f"{time_part} - {level_part} - {name_part} - {msg_part}"
-        
-        # Fallback если формат неожиданный
-        return f"{level_color}{formatted}{Style.RESET_ALL}"
+        def format(self, record: logging.LogRecord) -> str:
+            """Форматирует сообщение с цветом"""
+            # Сначала форматируем базовое сообщение
+            formatted = super().format(record)
+            
+            # Цвет для уровня логирования
+            level_color = self.COLORS.get(record.levelno, Fore.WHITE)
+            
+            # Цвет для модуля
+            module_color = self.MODULE_COLORS.get(record.name, Fore.WHITE)
+            
+            # Применяем цвета к частям сообщения
+            parts = formatted.split(' - ')
+            if len(parts) >= 4:
+                time_part = parts[0]
+                level_part = parts[1]
+                name_part = f"{module_color}{parts[2]}{Style.RESET_ALL}"
+                msg_part = f"{level_color}{parts[3]}{Style.RESET_ALL}"
+                return f"{time_part} - {level_part} - {name_part} - {msg_part}"
+            
+            # Fallback если формат неожиданный
+            return f"{level_color}{formatted}{Style.RESET_ALL}"
+else:
+    # Для Windows используем простой форматтер
+    ColoredFormatter = logging.Formatter
 
 
 class FileFormatter(logging.Formatter):
@@ -65,53 +83,64 @@ class FileFormatter(logging.Formatter):
         return super().format(record)
 
 
-class TechnicalLogFilter(logging.Filter):
-    """Фильтр для отключения технических логов в не-DEBUG режимах"""
-    
-    TECHNICAL_KEYWORDS = [
-        'Available AUTH mechanisms',
-        'Peer:',
-        'handling connection',
-        'EOF received',
-        'Connection lost',
-        'connection lost',
-        '>> b\'',
-        'sender:',
-        'recip:'
-    ]
-    
-    # В DEBUG режиме показываем больше технической информации
-    DEBUG_KEYWORDS = [
-        'DEBUG:',
-        'Connection:',
-        'SMTP:',
-        'Telegram:',
-        'Database:',
-        'UserManager:'
-    ]
-    
-    def __init__(self, debug_mode: bool = False):
-        super().__init__()
-        self.debug_mode = debug_mode
-    
-    def filter(self, record: logging.LogRecord) -> bool:
-        """Фильтрует технические сообщения"""
-        message = record.getMessage()
+# TechnicalLogFilter только для Unix систем
+if os.name != 'nt':  # Не Windows
+    class TechnicalLogFilter(logging.Filter):
+        """Фильтр для отключения технических логов в не-DEBUG режимах"""
         
-        # В не-DEBUG режимах блокируем все DEBUG сообщения
-        if not self.debug_mode and record.levelno == logging.DEBUG:
-            return False
+        TECHNICAL_KEYWORDS = [
+            'Available AUTH mechanisms',
+            'Peer:',
+            'handling connection',
+            'EOF received',
+            'Connection lost',
+            'connection lost',
+            '>> b\'',
+            'sender:',
+            'recip:'
+        ]
         
-        if self.debug_mode:
-            # В DEBUG режиме пропускаем все сообщения с ключевыми словами DEBUG
-            if any(keyword in message for keyword in self.DEBUG_KEYWORDS):
-                return True
-            # Остальные технические сообщения фильтруем даже в DEBUG
-            return not any(keyword in message for keyword in self.TECHNICAL_KEYWORDS)
+        # В DEBUG режиме показываем больше технической информации
+        DEBUG_KEYWORDS = [
+            'DEBUG:',
+            'Connection:',
+            'SMTP:',
+            'Telegram:',
+            'Database:',
+            'UserManager:'
+        ]
         
-        # В не-DEBUG режимах фильтруем все технические сообщения
-        # включая те, что содержат DEBUG_KEYWORDS
-        return not any(keyword in message for keyword in self.TECHNICAL_KEYWORDS + self.DEBUG_KEYWORDS)
+        def __init__(self, debug_mode: bool = False):
+            super().__init__()
+            self.debug_mode = debug_mode
+        
+        def filter(self, record: logging.LogRecord) -> bool:
+            """Фильтрует технические сообщения"""
+            message = record.getMessage()
+else:
+    # Для Windows используем простой фильтр
+    class TechnicalLogFilter(logging.Filter):
+        def __init__(self, debug_mode: bool = False):
+            super().__init__()
+            self.debug_mode = debug_mode
+        
+        def filter(self, record: logging.LogRecord) -> bool:
+            return True  # Пропускаем все сообщения
+        
+            # В не-DEBUG режимах блокируем все DEBUG сообщения
+            if not self.debug_mode and record.levelno == logging.DEBUG:
+                return False
+            
+            if self.debug_mode:
+                # В DEBUG режиме пропускаем все сообщения с ключевыми словами DEBUG
+                if any(keyword in message for keyword in self.DEBUG_KEYWORDS):
+                    return True
+                # Остальные технические сообщения фильтруем даже в DEBUG
+                return not any(keyword in message for keyword in self.TECHNICAL_KEYWORDS)
+            
+            # В не-DEBUG режимах фильтруем все технические сообщения
+            # включая те, что содержат DEBUG_KEYWORDS
+            return not any(keyword in message for keyword in self.TECHNICAL_KEYWORDS + self.DEBUG_KEYWORDS)
 
 
 class Logger:
