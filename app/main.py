@@ -1108,14 +1108,24 @@ def get_report_filename(surname, days, date_to):
 
 def main():
     try:
+        print("[DEBUG] Step 1: Starting main function...")
+        
         # Инициализируем логгер в начале main функции
+        print("[DEBUG] Step 2: Importing logger...")
         from logger import setup_logger
+        print("[DEBUG] Step 3: Logger imported successfully")
+        
+        print("[DEBUG] Step 4: Setting up logger...")
         logger_instance = setup_logger(LOGGING_LEVEL)
+        print("[DEBUG] Step 5: Logger setup completed")
         
         # Получаем версию приложения
+        print("[DEBUG] Step 6: Getting version...")
         version = get_version()
+        print(f"[DEBUG] Step 7: Version = {version}")
         
         # Логотип без боковых рамок
+        print("[DEBUG] Step 8: Creating logo...")
         logo_art = f"""
 {Fore.CYAN}╔════════════════════════════════════════════════════════════════╗
    OrionEventsToTelegram v{version}
@@ -1124,8 +1134,13 @@ def main():
   📊 Логирование: {LOGGING_LEVEL}
 ╚════════════════════════════════════════════════════════════════╝{Style.RESET_ALL}
 """
+        print("[DEBUG] Step 9: Printing logo...")
         print(logo_art)
+        print("[DEBUG] Step 10: Logo printed successfully")
+        
+        print("[DEBUG] Step 11: Calling log_info...")
         log_info("🚀 Запуск приложения OrionEventsToTelegram...", module='CORE')
+        print("[DEBUG] Step 12: log_info completed successfully")
         
         # Проверки конфигурации и модулей
         check_configuration()

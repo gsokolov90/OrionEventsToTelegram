@@ -118,42 +118,76 @@ class Logger:
     """Основной класс логирования"""
     
     def __init__(self, level: str = 'WARNING'):
-        self.level = level.upper()
-        self._setup_logging()
+        try:
+            print(f"[DEBUG] Logger.__init__: Starting with level {level}")
+            self.level = level.upper()
+            print(f"[DEBUG] Logger.__init__: Level set to {self.level}")
+            print("[DEBUG] Logger.__init__: Calling _setup_logging...")
+            self._setup_logging()
+            print("[DEBUG] Logger.__init__: _setup_logging completed successfully")
+        except Exception as e:
+            print(f"[DEBUG] Logger.__init__: Error in initialization: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     def _setup_logging(self) -> None:
         """Настройка логирования"""
-        level_map = {
-            'DEBUG': logging.DEBUG,
-            'INFO': logging.INFO,
-            'WARNING': logging.WARNING,
-            'ERROR': logging.ERROR
-        }
-        
-        log_level = level_map.get(self.level, logging.WARNING)
-        
-        # Создаем каталог для логов если его нет
-        log_dir = Path(__file__).parent.parent / 'log'
-        log_dir.mkdir(exist_ok=True)
-        
-        # Настройка базового логирования
-        logging.basicConfig(
-            level=log_level,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[]
-        )
-        
-        # Очищаем существующие обработчики
-        root_logger = logging.getLogger()
-        for handler in root_logger.handlers[:]:
-            root_logger.removeHandler(handler)
-        
-        # Создаем обработчики
-        self._setup_console_handler()
-        self._setup_file_handler()
-        
-        # Настройка логгеров сторонних библиотек
-        self._setup_external_loggers()
+        try:
+            print(f"[DEBUG] _setup_logging: Starting with level {self.level}")
+            
+            level_map = {
+                'DEBUG': logging.DEBUG,
+                'INFO': logging.INFO,
+                'WARNING': logging.WARNING,
+                'ERROR': logging.ERROR
+            }
+            
+            log_level = level_map.get(self.level, logging.WARNING)
+            print(f"[DEBUG] _setup_logging: Log level set to {log_level}")
+            
+            # Создаем каталог для логов если его нет
+            print("[DEBUG] _setup_logging: Creating log directory...")
+            log_dir = Path(__file__).parent.parent / 'log'
+            log_dir.mkdir(exist_ok=True)
+            print(f"[DEBUG] _setup_logging: Log directory ready: {log_dir}")
+            
+            # Настройка базового логирования
+            print("[DEBUG] _setup_logging: Setting up basic config...")
+            logging.basicConfig(
+                level=log_level,
+                format='%(asctime)s - %(levelname)s - %(message)s',
+                handlers=[]
+            )
+            print("[DEBUG] _setup_logging: Basic config completed")
+            
+            # Очищаем существующие обработчики
+            print("[DEBUG] _setup_logging: Clearing existing handlers...")
+            root_logger = logging.getLogger()
+            for handler in root_logger.handlers[:]:
+                root_logger.removeHandler(handler)
+            print("[DEBUG] _setup_logging: Handlers cleared")
+            
+            # Создаем обработчики
+            print("[DEBUG] _setup_logging: Setting up console handler...")
+            self._setup_console_handler()
+            print("[DEBUG] _setup_logging: Console handler completed")
+            
+            print("[DEBUG] _setup_logging: Setting up file handler...")
+            self._setup_file_handler()
+            print("[DEBUG] _setup_logging: File handler completed")
+            
+            # Настройка логгеров сторонних библиотек
+            print("[DEBUG] _setup_logging: Setting up external loggers...")
+            self._setup_external_loggers()
+            print("[DEBUG] _setup_logging: External loggers completed")
+            
+            print("[DEBUG] _setup_logging: All setup completed successfully")
+        except Exception as e:
+            print(f"[DEBUG] _setup_logging: Error in setup: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     def _setup_console_handler(self) -> None:
         """Настройка консольного обработчика"""
@@ -244,9 +278,16 @@ _logger_instance: Optional[Logger] = None
 
 def setup_logger(level: str = 'WARNING') -> Logger:
     """Инициализация логгера"""
-    global _logger_instance
-    _logger_instance = Logger(level)
-    return _logger_instance
+    try:
+        print(f"[DEBUG] Logger: Starting setup with level {level}")
+        global _logger_instance
+        print("[DEBUG] Logger: Creating Logger instance...")
+        _logger_instance = Logger(level)
+        print("[DEBUG] Logger: Logger instance created successfully")
+        return _logger_instance
+    except Exception as e:
+        print(f"[DEBUG] Logger: Error in setup_logger: {e}")
+        raise
 
 
 def get_logger(name: str = __name__) -> logging.Logger:
@@ -259,8 +300,20 @@ def get_logger(name: str = __name__) -> logging.Logger:
 
 def log_info(message: str, module: str = 'CORE') -> None:
     """Логирование информационного сообщения"""
-    logger = get_logger(module)
-    logger.info(message)
+    try:
+        print(f"[DEBUG] log_info: Starting with message '{message[:50]}...' and module '{module}'")
+        print("[DEBUG] log_info: Getting logger...")
+        logger = get_logger(module)
+        print("[DEBUG] log_info: Logger obtained, calling info...")
+        logger.info(message)
+        print("[DEBUG] log_info: info() called successfully")
+        print("[DEBUG] log_info: Completed successfully")
+    except Exception as e:
+        print(f"[DEBUG] log_info: Error occurred: {e}")
+        import traceback
+        traceback.print_exc()
+        # Fallback to print
+        print(f"[INFO] {module}: {message}")
 
 
 def log_warning(message: str, module: str = 'CORE') -> None:
