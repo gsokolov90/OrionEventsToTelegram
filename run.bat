@@ -161,8 +161,32 @@ echo [INFO] Testing Python in virtual environment...
 echo [INFO] Starting main.py with detailed error capture...
 
 REM Запускаем с перенаправлением вывода для захвата всех ошибок
-.venv\Scripts\python.exe main.py 2>&1
+echo [DEBUG] Starting Python with error capture...
+.venv\Scripts\python.exe -u main.py 2>&1
 set "EXIT_CODE=%errorlevel%"
+echo [DEBUG] Python process finished with exit code: %EXIT_CODE%
+
+REM Если приложение упало, попробуем запустить с отладкой
+if %EXIT_CODE% neq 0 (
+    echo [DEBUG] ========================================
+    echo [DEBUG] ATTEMPTING DEBUG MODE
+    echo [DEBUG] ========================================
+    echo [DEBUG] Trying to run with verbose error reporting...
+    .venv\Scripts\python.exe -v main.py 2>&1
+    echo [DEBUG] Verbose mode finished
+    echo [DEBUG] ========================================
+    
+    echo [DEBUG] ========================================
+    echo [DEBUG] TESTING MINIMAL PYTHON CODE
+    echo [DEBUG] ========================================
+    echo [DEBUG] Testing basic Python functionality...
+    .venv\Scripts\python.exe -c "print('Python basic test: OK')" 2>&1
+    echo [DEBUG] Testing imports...
+    .venv\Scripts\python.exe -c "import sys; print('Python sys import: OK')" 2>&1
+    .venv\Scripts\python.exe -c "import os; print('Python os import: OK')" 2>&1
+    .venv\Scripts\python.exe -c "import telebot; print('Telebot import: OK')" 2>&1
+    echo [DEBUG] ========================================
+)
 
 echo.
 echo [DEBUG] ========================================
