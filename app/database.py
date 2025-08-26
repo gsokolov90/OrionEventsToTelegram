@@ -6,29 +6,37 @@ import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
-try:
-    from logger import get_logger
-    logger = get_logger('Database')
-    def log_info(message, module='Database'):
-        logger.info(message)
-    def log_error(message, module='Database'):
-        logger.error(message)
-except ImportError:
-    # Fallback для прямого запуска файла
-    from .logger import get_logger
-    logger = get_logger('Database')
-    def log_info(message, module='Database'):
-        logger.info(message)
-    def log_error(message, module='Database'):
-        logger.error(message)
+# Простые функции логирования для Windows
+def log_info(message, module='Database'):
+    print(f"[INFO] {module}: {message}")
+
+def log_error(message, module='Database'):
+    print(f"[ERROR] {module}: {message}")
+
+# Пытаемся получить логгер только для Unix систем
+logger = None
+if os.name != 'nt':  # Не Windows
+    try:
+        from logger import get_logger
+        logger = get_logger('Database')
+        # Переопределяем функции если логгер доступен
+        def log_info(message, module='Database'):
+            logger.info(message)
+        def log_error(message, module='Database'):
+            logger.error(message)
+    except ImportError:
+        pass  # Используем простые функции
 
 
 class DatabaseManager:
     """Менеджер базы данных с автоматическим созданием схемы"""
     
     def __init__(self, db_path: str):
+        print(f"[DEBUG] Database: DatabaseManager.__init__ called with path: {db_path}")
         self.db_path = db_path
+        print("[DEBUG] Database: Calling _ensure_database_exists...")
         self._ensure_database_exists()
+        print("[DEBUG] Database: _ensure_database_exists completed")
     
     def _ensure_database_exists(self) -> None:
         """Создает базу данных и таблицы если их нет"""
@@ -182,4 +190,14 @@ class DatabaseManager:
 
 def init_database(db_path: str) -> DatabaseManager:
     """Инициализация базы данных"""
-    return DatabaseManager(db_path) 
+    print(f"[DEBUG] Database: init_database called with path: {db_path}")
+    try:
+        print("[DEBUG] Database: Creating DatabaseManager...")
+        db_manager = DatabaseManager(db_path)
+        print("[DEBUG] Database: DatabaseManager created successfully")
+        return db_manager
+    except Exception as e:
+        print(f"[DEBUG] Database: Error creating DatabaseManager: {e}")
+        import traceback
+        traceback.print_exc()
+        raise 
