@@ -6,26 +6,31 @@ import os
 from typing import Set, Dict, Optional, List, Tuple, Any
 from datetime import datetime
 
-# Импорты с обработкой ошибок
-try:
-    from logger import get_logger
-    logger = get_logger('UserManager')
-    def log_info(message: str, module: str = 'UserManager') -> None:
-        logger.info(message)
-    def log_warning(message: str, module: str = 'UserManager') -> None:
-        logger.warning(message)
-    def log_error(message: str, module: str = 'UserManager') -> None:
-        logger.error(message)
-except ImportError:
-    # Fallback для прямого запуска файла
-    from .logger import get_logger
-    logger = get_logger('UserManager')
-    def log_info(message: str, module: str = 'UserManager') -> None:
-        logger.info(message)
-    def log_warning(message: str, module: str = 'UserManager') -> None:
-        logger.warning(message)
-    def log_error(message: str, module: str = 'UserManager') -> None:
-        logger.error(message)
+# Простые функции логирования для Windows
+def log_info(message: str, module: str = 'UserManager') -> None:
+    print(f"[INFO] {module}: {message}")
+
+def log_warning(message: str, module: str = 'UserManager') -> None:
+    print(f"[WARNING] {module}: {message}")
+
+def log_error(message: str, module: str = 'UserManager') -> None:
+    print(f"[ERROR] {module}: {message}")
+
+# Пытаемся получить логгер только для Unix систем
+logger = None
+if os.name != 'nt':  # Не Windows
+    try:
+        from logger import get_logger
+        logger = get_logger('UserManager')
+        # Переопределяем функции если логгер доступен
+        def log_info(message: str, module: str = 'UserManager') -> None:
+            logger.info(message)
+        def log_warning(message: str, module: str = 'UserManager') -> None:
+            logger.warning(message)
+        def log_error(message: str, module: str = 'UserManager') -> None:
+            logger.error(message)
+    except ImportError:
+        pass  # Используем простые функции
 
 
 class UserManager:
