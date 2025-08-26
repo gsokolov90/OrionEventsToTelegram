@@ -93,6 +93,14 @@ if not exist app\main.py (
     exit /b 1
 )
 
+REM Check if virtual environment exists
+if not exist app\.venv\Scripts\python.exe (
+    echo [ERROR] Python not found in virtual environment!
+    echo [INFO] Expected path: app\.venv\Scripts\python.exe
+    pause
+    exit /b 1
+)
+
 REM Check if packages are installed and up to date
 echo [INFO] Checking dependencies...
 cd app
@@ -131,9 +139,12 @@ echo [INFO] Current directory: %CD%
 echo [INFO] Starting from app directory...
 cd app
 echo [INFO] App directory: %CD%
-echo [INFO] Python path: ..\app\.venv\Scripts\python.exe
+echo [INFO] Python path: .venv\Scripts\python.exe
 echo [INFO] Main file: main.py
-..\app\.venv\Scripts\python.exe main.py
+echo [INFO] Testing Python in virtual environment...
+.venv\Scripts\python.exe --version
+echo [INFO] Starting main.py...
+.venv\Scripts\python.exe main.py
 set "EXIT_CODE=%errorlevel%"
 cd ..
 if %EXIT_CODE% neq 0 (
