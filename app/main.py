@@ -1119,14 +1119,11 @@ def get_report_filename(surname, days, date_to):
     return f"{date_str} {surname} отчет УРВ {period}.html"
 
 def main():
-    try:
-        print("[DEBUG] Step 1: Getting version...")
-        # Получаем версию приложения
-        version = get_version()
-        print(f"[DEBUG] Step 1: Version = {version}")
-        
-        # Логотип без боковых рамок
-        logo_art = f"""
+    # Получаем версию приложения
+    version = get_version()
+    
+    # Логотип без боковых рамок
+    logo_art = f"""
 {Fore.CYAN}╔════════════════════════════════════════════════════════════════╗
    OrionEventsToTelegram v{version}
   🚀 Мониторинг событий УРВ → Telegram Bot
@@ -1134,130 +1131,91 @@ def main():
   📊 Логирование: {LOGGING_LEVEL}
 ╚════════════════════════════════════════════════════════════════╝{Style.RESET_ALL}
 """
-        print(logo_art)
-        print("[DEBUG] Step 2: Logo printed successfully")
-        
-        print("[DEBUG] Step 3: Setting up logger...")
-        log_info("🚀 Запуск приложения OrionEventsToTelegram...", module='CORE')
-        print("[DEBUG] Step 3: Logger setup completed")
-        
-        print("[DEBUG] Step 4: Checking configuration...")
-        # Проверки конфигурации и модулей
-        check_configuration()
-        print("[DEBUG] Step 4: Configuration check completed")
-        
-        print("[DEBUG] Step 5: Checking SMTP server...")
-        check_smtp_server()
-        print("[DEBUG] Step 5: SMTP server check completed")
-        
-        print("[DEBUG] Step 6: Creating Telegram bot...")
-        # Создаем бота
-        bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
-        print("[DEBUG] Step 6: Telegram bot created successfully")
-        
-        print("[DEBUG] Step 7: Checking Telegram API connection...")
-        # Проверяем подключение к Telegram API
-        telegram_available = check_telegram_bot(bot)
-        if not telegram_available:
-            log_warning("Telegram бот будет работать в режиме восстановления", module='CORE')
-        print("[DEBUG] Step 7: Telegram API check completed")
-        
-        print("[DEBUG] Step 8: Setting up signal handlers...")
-        # Устанавливаем обработчик сигналов
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-        print("[DEBUG] Step 8: Signal handlers setup completed")
-        
-        print("[DEBUG] Step 9: Initializing database...")
-        # Инициализация базы данных
-        log_info("🗄️  Инициализация базы данных...", module='CORE')
-        db = init_database(DATABASE_PATH)
-        print("[DEBUG] Step 9: Database initialization completed")
-        
-        print("[DEBUG] Step 10: Creating user manager...")
-        # Создаем менеджер пользователей после инициализации БД
-        global user_manager
-        user_manager = UserManager(db)
-        log_info("✅ Менеджер пользователей инициализирован", module='CORE')
-        print("[DEBUG] Step 10: User manager created successfully")
+    print(logo_art)
+    log_info("🚀 Запуск приложения OrionEventsToTelegram...", module='CORE')
+    
+    # Проверки конфигурации и модулей
+    check_configuration()
+    check_smtp_server()
+    
+    # Создаем бота
+    bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+    
+    # Проверяем подключение к Telegram API
+    telegram_available = check_telegram_bot(bot)
+    if not telegram_available:
+        log_warning("Telegram бот будет работать в режиме восстановления", module='CORE')
+    
+    # Устанавливаем обработчик сигналов
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    # Инициализация базы данных
+    log_info("🗄️  Инициализация базы данных...", module='CORE')
+    db = init_database(DATABASE_PATH)
+    
+    # Создаем менеджер пользователей после инициализации БД
+    global user_manager
+    user_manager = UserManager(db)
+    log_info("✅ Менеджер пользователей инициализирован", module='CORE')
 
-        print("[DEBUG] Step 11: Getting events database configuration...")
-        # Инициализация базы данных событий
-        events_db_path = get_events_database_path()
-        events_retention_days = get_events_retention_days()
-        cleanup_enabled = get_cleanup_enabled()
-        cleanup_time = get_cleanup_time()
-        print("[DEBUG] Step 11: Events database configuration retrieved")
+    # Инициализация базы данных событий
+    events_db_path = get_events_database_path()
+    events_retention_days = get_events_retention_days()
+    cleanup_enabled = get_cleanup_enabled()
+    cleanup_time = get_cleanup_time()
 
-        print("[DEBUG] Step 12: Initializing events database...")
-        log_info(f"🗄️  Инициализация базы данных событий: {events_db_path}", module='CORE')
-        events_db = init_events_database(events_db_path)
-        log_info("✅ База данных событий инициализирована", module='CORE')
-        print("[DEBUG] Step 12: Events database initialization completed")
+    log_info(f"🗄️  Инициализация базы данных событий: {events_db_path}", module='CORE')
+    events_db = init_events_database(events_db_path)
+    log_info("✅ База данных событий инициализирована", module='CORE')
+    
+    # Получаем статистику событий
+    stats = events_db.get_statistics()
+    log_info(f"📊 Статистика событий: {stats['total_events']} записей, {stats['unique_employees']} сотрудников", module='CORE')
+
+    # Инициализация планировщика очистки событий
+    global events_cleanup_scheduler
+    if cleanup_enabled:
+        log_info(f"🧹 Запуск планировщика очистки событий (время: {cleanup_time})", module='CORE')
+        events_cleanup_scheduler = EventsCleanupScheduler(events_db, events_retention_days, cleanup_time, cleanup_enabled)
+        events_cleanup_scheduler.start()
+        log_info("✅ Планировщик очистки событий запущен", module='CORE')
+    else:
+        log_info("🧹 Планировщик очистки событий отключен в конфигурации.", module='CORE')
+        events_cleanup_scheduler = None
+    
+    # Запускаем SMTP сервер с передачей бота, user_manager и events_db
+    smtp_thread = threading.Thread(target=start_smtp_server, args=(bot, user_manager, events_db))
+    smtp_thread.daemon = True  # Поток завершится при закрытии основного потока
+    smtp_thread.start()
+
+    # Удаляем поток проверки ввода, так как он создает конфликты
+
+    try:
+        # Небольшая задержка для запуска SMTP сервера
+        time.sleep(1)
         
-        print("[DEBUG] Step 13: Getting events statistics...")
-        # Получаем статистику событий
-        stats = events_db.get_statistics()
-        log_info(f"📊 Статистика событий: {stats['total_events']} записей, {stats['unique_employees']} сотрудников", module='CORE')
-        print("[DEBUG] Step 13: Events statistics retrieved successfully")
-
-        print("[DEBUG] Step 14: Setting up events cleanup scheduler...")
-        # Инициализация планировщика очистки событий
-        global events_cleanup_scheduler
-        if cleanup_enabled:
-            log_info(f"🧹 Запуск планировщика очистки событий (время: {cleanup_time})", module='CORE')
-            events_cleanup_scheduler = EventsCleanupScheduler(events_db, events_retention_days, cleanup_time, cleanup_enabled)
-            events_cleanup_scheduler.start()
-            log_info("✅ Планировщик очистки событий запущен", module='CORE')
-        else:
-            log_info("🧹 Планировщик очистки событий отключен в конфигурации.", module='CORE')
-            events_cleanup_scheduler = None
-        print("[DEBUG] Step 14: Events cleanup scheduler setup completed")
+        start_telegram_bot(bot, user_manager)  # Запускаем бота в основном потоке
+    except KeyboardInterrupt:
+        log_warning("Получен сигнал CTRL-C (KeyboardInterrupt). Завершение работы...", module='CORE')
+        # Устанавливаем флаг для завершения бота
+        global stop_bot
+        stop_bot = True
         
-        print("[DEBUG] Step 15: Starting SMTP server thread...")
-        # Запускаем SMTP сервер с передачей бота, user_manager и events_db
-        smtp_thread = threading.Thread(target=start_smtp_server, args=(bot, user_manager, events_db))
-        smtp_thread.daemon = True  # Поток завершится при закрытии основного потока
-        smtp_thread.start()
-        print("[DEBUG] Step 15: SMTP server thread started successfully")
-
-        # Удаляем поток проверки ввода, так как он создает конфликты
-
-        try:
-            print("[DEBUG] Step 16: Waiting for SMTP server startup...")
-            # Небольшая задержка для запуска SMTP сервера
-            time.sleep(1)
-            print("[DEBUG] Step 16: SMTP server startup wait completed")
-            
-            print("[DEBUG] Step 17: Starting Telegram bot...")
-            start_telegram_bot(bot, user_manager)  # Запускаем бота в основном потоке
-            print("[DEBUG] Step 17: Telegram bot started successfully")
-        except KeyboardInterrupt:
-            log_warning("Получен сигнал CTRL-C (KeyboardInterrupt). Завершение работы...", module='CORE')
-            # Устанавливаем флаг для завершения бота
-            global stop_bot
-            stop_bot = True
-            
-            # Останавливаем планировщик очистки событий
-            if events_cleanup_scheduler:
-                try:
-                    log_info("🛑 Остановка планировщика очистки событий...", module='CORE')
-                    events_cleanup_scheduler.stop()
-                    log_info("✅ Планировщик очистки событий остановлен", module='CORE')
-                except Exception as e:
-                    log_error(f"❌ Ошибка остановки планировщика очистки: {e}", module='CORE')
-            
-            # Небольшая пауза для завершения потоков
-            time.sleep(0.5)
-            
-            log_info("✅ Приложение корректно завершено", module='CORE')
-            os._exit(0)  # Принудительное завершение
-    except Exception as e:
-        print(f"[DEBUG] CRITICAL ERROR in main(): {e}")
-        print(f"[DEBUG] Error type: {type(e)}")
-        import traceback
-        traceback.print_exc()
-        raise
+        # Останавливаем планировщик очистки событий
+        if events_cleanup_scheduler:
+            try:
+                log_info("🛑 Остановка планировщика очистки событий...", module='CORE')
+                events_cleanup_scheduler.stop()
+                log_info("✅ Планировщик очистки событий остановлен", module='CORE')
+            except Exception as e:
+                log_error(f"❌ Ошибка остановки планировщика очистки: {e}", module='CORE')
+        
+        # Небольшая пауза для завершения потоков
+        time.sleep(0.5)
+        
+        log_info("✅ Приложение корректно завершено", module='CORE')
+        os._exit(0)  # Принудительное завершение
 
 if __name__ == '__main__':
     main()

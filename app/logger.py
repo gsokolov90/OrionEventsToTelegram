@@ -165,18 +165,14 @@ class Logger:
     def _setup_file_handler(self) -> None:
         """Настройка файлового обработчика с ротацией по дате"""
         try:
-            try:
-                from .config import get_logging_backup_logs_count
-            except ImportError:
-                from config import get_logging_backup_logs_count
             log_dir = Path(__file__).parent.parent / 'log'
             
             # Формируем имя файла только с датой
             dt_str = datetime.now().strftime('%Y%m%d')
             log_file = log_dir / f'{dt_str}_app.log'
             
-            # Очищаем старые лог файлы (оставляем только последние backup_logs_count дней)
-            self._cleanup_old_logs(log_dir, get_logging_backup_logs_count())
+            # Очищаем старые лог файлы (оставляем только последние 7 дней по умолчанию)
+            self._cleanup_old_logs(log_dir, 7)
             
             # Используем обычный FileHandler вместо RotatingFileHandler
             # так как ротация теперь по дате, а не по размеру
