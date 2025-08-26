@@ -68,6 +68,29 @@ if not errorlevel 1 (
     exit /b 1
 )
 
+REM Check for BOM in config.ini and fix if needed
+echo [INFO] Checking config.ini for encoding issues...
+python -c "
+import sys
+try:
+    with open('config.ini', 'rb') as f:
+        content = f.read()
+    if content.startswith(b'\xef\xbb\xbf'):
+        print('[WARNING] BOM detected in config.ini, fixing...')
+        content = content[3:]  # Remove BOM
+        with open('config.ini', 'wb') as f:
+            f.write(content)
+        print('[SUCCESS] BOM removed from config.ini')
+    else:
+        print('[INFO] config.ini encoding is correct')
+except Exception as e:
+    print(f'[ERROR] Error checking config.ini: {e}')
+    sys.exit(1)
+" 2>nul
+if errorlevel 1 (
+    echo [WARNING] Could not check config.ini encoding, continuing...
+)
+
 REM Activate virtual environment
 echo [INFO] Activating virtual environment...
 call app\.venv\Scripts\activate.bat
@@ -112,9 +135,27 @@ echo [INFO] Starting application...
 echo [INFO] Press Ctrl+C to stop
 echo.
 
-REM Run the application
+REM Run the application with error handling
 app\.venv\Scripts\python.exe -m app.main
+if errorlevel 1 (
+    echo.
+    echo [ERROR] Application crashed with exit code %errorlevel%
+    echo [INFO] Check the error messages above for details
+    echo [INFO] Common issues:
+    echo [INFO] - BOM in config.ini (should be fixed automatically)
+    echo [INFO] - Invalid bot token
+    echo [INFO] - Missing database files
+    echo [INFO] - Network connectivity issues
+    echo.
+    echo [INFO] If the problem persists, try:
+    echo [INFO] 1. Delete config.ini and run this script again
+    echo [INFO] 2. Check your internet connection
+    echo [INFO] 3. Verify your bot token is correct
+    echo.
+    pause
+    exit /b 1
+)
 
 echo.
-echo [INFO] Application stopped
+echo [INFO] Application stopped normally
 pause 

@@ -31,7 +31,32 @@ def get_config():
             'user_filters_file = db/user_filters.txt'
         )
     
-    config.read(config_path, encoding='utf-8')
+    try:
+        # Пробуем прочитать с автоматическим определением кодировки
+        config.read(config_path, encoding='utf-8')
+    except UnicodeDecodeError:
+        try:
+            # Если не получилось, пробуем с utf-8-sig (автоматически убирает BOM)
+            config.read(config_path, encoding='utf-8-sig')
+        except Exception as e:
+            # Если и это не помогло, читаем как bytes и декодируем вручную
+            with open(config_path, 'rb') as f:
+                content = f.read()
+                # Убираем BOM если есть
+                if content.startswith(b'\xef\xbb\xbf'):
+                    content = content[3:]
+                # Декодируем как UTF-8
+                content_str = content.decode('utf-8')
+                # Создаем временный файл для configparser
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False, encoding='utf-8') as temp_file:
+                    temp_file.write(content_str)
+                    temp_file.flush()
+                    config.read(temp_file.name, encoding='utf-8')
+                    # Удаляем временный файл
+                    import os
+                    os.unlink(temp_file.name)
+    
     return config
 
 def get_telegram_token():
