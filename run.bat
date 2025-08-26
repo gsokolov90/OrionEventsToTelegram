@@ -70,23 +70,7 @@ if not errorlevel 1 (
 
 REM Check for BOM in config.ini and fix if needed
 echo [INFO] Checking config.ini for encoding issues...
-python -c "
-import sys
-try:
-    with open('config.ini', 'rb') as f:
-        content = f.read()
-    if content.startswith(b'\xef\xbb\xbf'):
-        print('[WARNING] BOM detected in config.ini, fixing...')
-        content = content[3:]  # Remove BOM
-        with open('config.ini', 'wb') as f:
-            f.write(content)
-        print('[SUCCESS] BOM removed from config.ini')
-    else:
-        print('[INFO] config.ini encoding is correct')
-except Exception as e:
-    print(f'[ERROR] Error checking config.ini: {e}')
-    sys.exit(1)
-" 2>nul
+python fix_bom.py
 if errorlevel 1 (
     echo [WARNING] Could not check config.ini encoding, continuing...
 )
