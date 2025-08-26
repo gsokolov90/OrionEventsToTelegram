@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import threading
 import time
 try:
-    from app.logger import get_logger
+    from logger import get_logger
     logger = get_logger('EventsDatabase')
     def log_info(message, module='EventsDatabase'):
         logger.info(message)

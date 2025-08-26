@@ -70,7 +70,7 @@ if not errorlevel 1 (
 
 REM Check for BOM in config.ini and fix if needed
 echo [INFO] Checking config.ini for encoding issues...
-python fix_bom.py
+python fix_bom_simple.py
 if errorlevel 1 (
     echo [WARNING] Could not check config.ini encoding, continuing...
 )
@@ -101,20 +101,7 @@ if not exist app\.venv\Scripts\python.exe (
     exit /b 1
 )
 
-REM Check system compatibility
-echo [INFO] Checking system compatibility...
-echo [INFO] Windows version:
-ver
-echo [INFO] System architecture:
-if "%PROCESSOR_ARCHITECTURE%"=="AMD64" (
-    echo [INFO] 64-bit system detected
-) else (
-    echo [INFO] 32-bit system detected
-)
-echo [INFO] Available memory:
-wmic computersystem get TotalPhysicalMemory /value 2>nul | find "="
-echo [INFO] Python architecture:
-app\.venv\Scripts\python.exe -c "import platform; print('[INFO] Python arch:', platform.architecture()[0])" 2>nul
+
 
 REM Check if packages are installed and up to date
 echo [INFO] Checking dependencies...
@@ -158,74 +145,30 @@ echo [INFO] Python path: .venv\Scripts\python.exe
 echo [INFO] Main file: main.py
 echo [INFO] Testing Python in virtual environment...
 .venv\Scripts\python.exe --version
-echo [INFO] Starting main.py with detailed error capture...
+echo [INFO] Starting main.py...
 
-REM Запускаем с перенаправлением вывода для захвата всех ошибок
-echo [DEBUG] Starting Python with error capture...
-.venv\Scripts\python.exe -u main.py 2>&1
+REM Запускаем приложение
+.venv\Scripts\python.exe main.py
 set "EXIT_CODE=%errorlevel%"
-echo [DEBUG] Python process finished with exit code: %EXIT_CODE%
 
-REM Если приложение упало, попробуем запустить с отладкой
-if %EXIT_CODE% neq 0 (
-    echo [DEBUG] ========================================
-    echo [DEBUG] ATTEMPTING DEBUG MODE
-    echo [DEBUG] ========================================
-    echo [DEBUG] Trying to run with verbose error reporting...
-    .venv\Scripts\python.exe -v main.py 2>&1
-    echo [DEBUG] Verbose mode finished
-    echo [DEBUG] ========================================
-    
-    echo [DEBUG] ========================================
-    echo [DEBUG] TESTING MINIMAL PYTHON CODE
-    echo [DEBUG] ========================================
-    echo [DEBUG] Testing basic Python functionality...
-    .venv\Scripts\python.exe -c "print('Python basic test: OK')" 2>&1
-    echo [DEBUG] Testing imports...
-    .venv\Scripts\python.exe -c "import sys; print('Python sys import: OK')" 2>&1
-    .venv\Scripts\python.exe -c "import os; print('Python os import: OK')" 2>&1
-    .venv\Scripts\python.exe -c "import telebot; print('Telebot import: OK')" 2>&1
-    echo [DEBUG] ========================================
-)
 
-echo.
-echo [DEBUG] ========================================
-echo [DEBUG] DETAILED ERROR ANALYSIS
-echo [DEBUG] ========================================
-echo [DEBUG] Exit code: %EXIT_CODE%
-echo [DEBUG] Current time: %date% %time%
-echo [DEBUG] Python version: 
-.venv\Scripts\python.exe --version 2>&1
-echo [DEBUG] Python path: %CD%\.venv\Scripts\python.exe
-echo [DEBUG] Main file: %CD%\main.py
-echo [DEBUG] Config file exists: 
-if exist ..\config.ini (echo [DEBUG] YES) else (echo [DEBUG] NO)
-echo [DEBUG] Database directory exists:
-if exist ..\db (echo [DEBUG] YES) else (echo [DEBUG] NO)
-echo [DEBUG] Log directory exists:
-if exist ..\log (echo [DEBUG] YES) else (echo [DEBUG] NO)
-echo [DEBUG] ========================================
 
 cd ..
 
 if %EXIT_CODE% neq 0 (
     echo.
     echo [ERROR] Application crashed with exit code %EXIT_CODE%
-    echo [ERROR] Exit code -1073740940 usually means memory access violation or DLL issue
     echo [INFO] Check the error messages above for details
     echo [INFO] Common issues:
     echo [INFO] - BOM in config.ini (should be fixed automatically)
     echo [INFO] - Invalid bot token
     echo [INFO] - Missing database files
     echo [INFO] - Network connectivity issues
-    echo [INFO] - Memory/DLL compatibility issues
     echo.
     echo [INFO] If the problem persists, try:
     echo [INFO] 1. Delete config.ini and run this script again
     echo [INFO] 2. Check your internet connection
     echo [INFO] 3. Verify your bot token is correct
-    echo [INFO] 4. Check Windows Event Viewer for system errors
-    echo [INFO] 5. Try running as Administrator
     echo.
     pause
     exit /b 1

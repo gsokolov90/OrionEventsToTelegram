@@ -8,7 +8,7 @@ from datetime import datetime
 
 # Импорты с обработкой ошибок
 try:
-    from app.logger import get_logger
+    from logger import get_logger
     logger = get_logger('UserManager')
     def log_info(message: str, module: str = 'UserManager') -> None:
         logger.info(message)

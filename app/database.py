@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 try:
-    from app.logger import get_logger
+    from logger import get_logger
     logger = get_logger('Database')
     def log_info(message, module='Database'):
         logger.info(message)

@@ -34,28 +34,45 @@ def get_config():
     try:
         # Пробуем прочитать с автоматическим определением кодировки
         config.read(config_path, encoding='utf-8')
-    except UnicodeDecodeError:
+        print("[DEBUG] Успешно прочитано config.ini с utf-8")
+    except Exception as e:
+        print(f"[DEBUG] Ошибка чтения config.ini с utf-8: {e}")
         try:
             # Если не получилось, пробуем с utf-8-sig (автоматически убирает BOM)
             config.read(config_path, encoding='utf-8-sig')
-        except Exception as e:
+            print("[DEBUG] Успешно прочитано с utf-8-sig")
+        except Exception as e2:
+            print(f"[DEBUG] Ошибка чтения config.ini с utf-8-sig: {e2}")
             # Если и это не помогло, читаем как bytes и декодируем вручную
-            with open(config_path, 'rb') as f:
-                content = f.read()
-                # Убираем BOM если есть
-                if content.startswith(b'\xef\xbb\xbf'):
-                    content = content[3:]
-                # Декодируем как UTF-8
-                content_str = content.decode('utf-8')
-                # Создаем временный файл для configparser
-                import tempfile
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False, encoding='utf-8') as temp_file:
-                    temp_file.write(content_str)
-                    temp_file.flush()
-                    config.read(temp_file.name, encoding='utf-8')
-                    # Удаляем временный файл
-                    import os
-                    os.unlink(temp_file.name)
+            try:
+                with open(config_path, 'rb') as f:
+                    content = f.read()
+                    print(f"[DEBUG] Прочитано {len(content)} байт из config.ini")
+                    
+                    # Убираем BOM если есть
+                    if content.startswith(b'\xef\xbb\xbf'):
+                        print("[DEBUG] Обнаружен BOM, убираем...")
+                        content = content[3:]
+                    
+                    # Декодируем как UTF-8
+                    content_str = content.decode('utf-8')
+                    print(f"[DEBUG] Декодировано в строку длиной {len(content_str)}")
+                    
+                    # Создаем временный файл для configparser
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.ini', delete=False, encoding='utf-8') as temp_file:
+                        temp_file.write(content_str)
+                        temp_file.flush()
+                        print(f"[DEBUG] Создан временный файл: {temp_file.name}")
+                        config.read(temp_file.name, encoding='utf-8')
+                        print("[DEBUG] Успешно прочитано из временного файла")
+                        # Удаляем временный файл
+                        import os
+                        os.unlink(temp_file.name)
+                        print("[DEBUG] Временный файл удален")
+            except Exception as e3:
+                print(f"[DEBUG] Критическая ошибка при обработке config.ini: {e3}")
+                raise RuntimeError(f"Не удалось прочитать config.ini: {e3}")
     
     return config
 
