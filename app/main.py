@@ -1106,7 +1106,6 @@ def main():
             print("[DEBUG] Step 2: Windows detected, using simple logger...")
             import logging
             # Создаем директорию для логов если её нет
-            import os
             log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'log')
             os.makedirs(log_dir, exist_ok=True)
             
