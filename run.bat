@@ -86,6 +86,13 @@ if not exist app\requirements.txt (
     exit /b 1
 )
 
+REM Check if main.py exists
+if not exist app\main.py (
+    echo [ERROR] main.py not found in app directory!
+    pause
+    exit /b 1
+)
+
 REM Check if packages are installed and up to date
 echo [INFO] Checking dependencies...
 cd app
@@ -120,10 +127,18 @@ echo [INFO] Press Ctrl+C to stop
 echo.
 
 REM Run the application with error handling
-app\.venv\Scripts\python.exe -m app.main
-if errorlevel 1 (
+echo [INFO] Current directory: %CD%
+echo [INFO] Starting from app directory...
+cd app
+echo [INFO] App directory: %CD%
+echo [INFO] Python path: ..\app\.venv\Scripts\python.exe
+echo [INFO] Main file: main.py
+..\app\.venv\Scripts\python.exe main.py
+set "EXIT_CODE=%errorlevel%"
+cd ..
+if %EXIT_CODE% neq 0 (
     echo.
-    echo [ERROR] Application crashed with exit code %errorlevel%
+    echo [ERROR] Application crashed with exit code %EXIT_CODE%
     echo [INFO] Check the error messages above for details
     echo [INFO] Common issues:
     echo [INFO] - BOM in config.ini (should be fixed automatically)
