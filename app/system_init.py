@@ -41,7 +41,9 @@ class SystemInitializer:
     
     def setup_logging(self) -> None:
         """Настройка системы логирования"""
-        setup_logger(self.logging_level)
+        from .config import get_logging_backup_logs_count
+        backup_days = get_logging_backup_logs_count()
+        setup_logger(self.logging_level, backup_days)
         log_info("🚀 Система логирования инициализирована", module='SystemInit')
     
     def check_configuration(self) -> bool:

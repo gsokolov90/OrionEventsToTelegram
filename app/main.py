@@ -13,7 +13,6 @@ from aiosmtpd.handlers import Message
 from email.message import EmailMessage
 import telebot
 import re
-from colorama import init, Fore, Style
 from datetime import datetime
 import time
 import requests
@@ -54,40 +53,17 @@ if os.name == 'nt':  # Windows
     # Устанавливаем заголовок окна консоли
     os.system('title OrionEventsToTelegram - Мониторинг УРВ')
 
-# Инициализация colorama для Windows
-init()
-
 # Получаем токен из переменных окружения
 TELEGRAM_BOT_TOKEN = get_telegram_token()
 ADMIN_IDS = get_admin_ids()
 DATABASE_PATH = get_users_database_path()
 
-
-
-# Получаем уровень логирования из конфигурации
+# Получаем уровень логирования и настройки логирования из конфигурации
 LOGGING_LEVEL = get_logging_level()
+BACKUP_LOGS_COUNT = get_logging_backup_logs_count()
 
 # Импортируем функции логирования (инициализация будет в main)
-# На Windows эти функции будут переопределены простыми версиями
-if os.name != 'nt':  # Не Windows
-    from logger import log_info, log_warning, log_error, log_debug, log_telegram, log_smtp
-else:
-    # Заглушки для Windows - будут переопределены в main()
-    def log_info(message, module='CORE'):
-        pass
-    def log_warning(message, module='CORE'):
-        pass
-    def log_error(message, module='CORE'):
-        pass
-    def log_debug(message, module='CORE'):
-        pass
-    def log_telegram(message):
-        pass
-    def log_smtp(message):
-        pass
-
-# Удаляю глобальное создание bot
-# bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+from logger import log_info, log_warning, log_error, log_debug, log_telegram, log_smtp
 
 # Глобальная переменная для контроля завершения бота
 stop_bot = False
@@ -97,8 +73,6 @@ user_manager = None
 
 # Глобальная переменная для планировщика очистки событий
 events_cleanup_scheduler = None
-
-# Удаляем функцию check_user_input, так как она создает конфликты
 
 def signal_handler(signum, frame):
     """Обработчик сигналов для корректного завершения"""
@@ -126,7 +100,7 @@ def signal_handler(signum, frame):
     else:
         # Первый запрос на выход
         signal_handler.exit_requested = True
-        print(f"\n{Fore.YELLOW}[WARN] Получен сигнал завершения!{Style.RESET_ALL}")
+        print(f"\n[WARN] Получен сигнал завершения!")
         
         # ASCII рисунок для подтверждения выхода без боковых рамок
         confirmation_art = f"""
@@ -142,7 +116,7 @@ def signal_handler(signum, frame):
   │  [Ожидание 3 сек] ──→ Отменить                           │
   │                                                          │
   ╰──────────────────────────────────────────────────────────╯
-╚════════════════════════════════════════════════════════════════════╝{Style.RESET_ALL}
+╚════════════════════════════════════════════════════════════════════╝
 """
         print(confirmation_art)
         
@@ -151,7 +125,7 @@ def signal_handler(signum, frame):
             time.sleep(3)
             if hasattr(signal_handler, 'exit_requested'):
                 delattr(signal_handler, 'exit_requested')
-                print(f"\n{Fore.GREEN}[INFO] Запрос на выход отменен{Style.RESET_ALL}")
+                print(f"\n[INFO] Запрос на выход отменен")
         
         # Запускаем поток для сброса флага
         reset_thread = threading.Thread(target=reset_flag)
@@ -1173,7 +1147,7 @@ def main():
             print("[DEBUG] Step 3: Logger imported successfully")
             
             print("[DEBUG] Step 4: Setting up logger...")
-            setup_logger(LOGGING_LEVEL)
+            setup_logger(LOGGING_LEVEL, BACKUP_LOGS_COUNT)
             print("[DEBUG] Step 5: Logger setup completed")
         
         # Получаем версию приложения
@@ -1189,7 +1163,7 @@ def main():
   🚀 Мониторинг событий УРВ → Telegram Bot
   📧 SMTP: localhost:1025
   📊 Логирование: {LOGGING_LEVEL}
-╚════════════════════════════════════════════════════════════════╝{Style.RESET_ALL}
+╚════════════════════════════════════════════════════════════════╝
 """
         print("[DEBUG] Step 9: Printing logo...")
         print(logo_art)
@@ -1294,19 +1268,19 @@ def main():
             os._exit(0)  # Принудительное завершение
         
     except Exception as e:
-        print(f"\n{Fore.RED}[CRITICAL ERROR] Критическая ошибка в main(): {e}{Style.RESET_ALL}")
-        print(f"{Fore.RED}[CRITICAL ERROR] Тип ошибки: {type(e).__name__}{Style.RESET_ALL}")
+        print(f"\n[CRITICAL ERROR] Критическая ошибка в main(): {e}")
+        print(f"[CRITICAL ERROR] Тип ошибки: {type(e).__name__}")
         
         # Пытаемся вывести traceback если возможно
         try:
             import traceback
-            print(f"\n{Fore.YELLOW}[TRACEBACK]{Style.RESET_ALL}")
+            print(f"\n[TRACEBACK]")
             traceback.print_exc()
         except:
             pass
         
-        print(f"\n{Fore.RED}Приложение завершилось с ошибкой!{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}Проверьте конфигурацию и попробуйте снова.{Style.RESET_ALL}")
+        print(f"\n[CRITICAL ERROR] Приложение завершилось с ошибкой!")
+        print(f"[CRITICAL ERROR] Проверьте конфигурацию и попробуйте снова.")
         
         # Пауза перед выходом
         input("\nНажмите Enter для выхода...")
