@@ -104,7 +104,7 @@ def signal_handler(signum, frame):
         
         # ASCII рисунок для подтверждения выхода без боковых рамок
         confirmation_art = f"""
-{Fore.CYAN}╔════════════════════════════════════════════════════════════════════╗
+╔════════════════════════════════════════════════════════════════════╗
                     ⚠️  ПОДТВЕРЖДЕНИЕ ВЫХОДА  ⚠️
 
   Для подтверждения выхода нажмите Ctrl-C еще раз
@@ -133,17 +133,6 @@ def signal_handler(signum, frame):
         reset_thread.start()
 
 # Универсальная функция логирования с подсветкой модуля
-MODULE_COLORS = {
-    'CORE': Fore.GREEN,
-    'Telegram': Fore.MAGENTA,
-    'SMTP': Fore.BLUE,
-    'UserManager': Fore.CYAN,
-    'Database': Fore.BLUE,
-    'WARNING': Fore.YELLOW,
-    'ERROR': Fore.RED,
-    'DEBUG': Fore.CYAN
-}
-
 def log_message(level, message, module='CORE'):
     """Логирование сообщений с указанием уровня"""
     if level == 'INFO':
@@ -1158,7 +1147,7 @@ def main():
         # Логотип без боковых рамок
         print("[DEBUG] Step 8: Creating logo...")
         logo_art = f"""
-{Fore.CYAN}╔════════════════════════════════════════════════════════════════╗
+╔════════════════════════════════════════════════════════════════╗
    OrionEventsToTelegram v{version}
   🚀 Мониторинг событий УРВ → Telegram Bot
   📧 SMTP: localhost:1025
